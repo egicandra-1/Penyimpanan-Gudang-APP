@@ -12,22 +12,48 @@ SCOPE = [
 
 @st.cache_resource
 def init_connection_v3():
-    # Ambil teks mentah JSON dari Secrets
+    # 1. Cek apakah Secrets ada
+    if "gcp_json_teks" not in st.secrets:
+        st.error("❌ Secrets 'gcp_json_teks' tidak ditemukan di Streamlit Cloud Anda!")
+        st.stop()
+        
     json_text = st.secrets["gcp_json_teks"]
     
-    # Ubah teks mentah menjadi dictionary Python
-    creds_dict = json.loads(json_text)
+    # 2. Cek validitas format JSON
+    try:
+        creds_dict = json.loads(json_text)
+    except Exception as e:
+        st.error(f"❌ Format JSON di Secrets rusak atau salah ketik: {e}")
+        st.info("Pastikan isi Secrets diawali tanda { dan diakhiri tanda } serta diapit oleh tiga kutip satu (''')")
+        st.stop()
     
-    if "private_key" in creds_dict:
-        pk = creds_dict["private_key"]
-        # 1. Ubah teks \n menjadi enter asli jika ada
-        pk = pk.replace("\\n", "\n")
-        # 2. Bersihkan spasi gaib di awal/akhir setiap baris kunci privat
-        lines = [line.strip() for line in pk.split("\n") if line.strip()]
-        creds_dict["private_key"] = "\n".join(lines)
+    # 3. Cek kolom private_key
+    if "private_key" not in creds_dict:
+        st.error("❌ File JSON Anda tidak memiliki kolom 'private_key'. Anda mungkin salah mendownload jenis file JSON (Pastikan mendownload file JSON dari 'Service Account Key', bukan OAuth Client).")
+        st.stop()
+        
+    pk = creds_dict["private_key"]
+    
+    # 4. Bersihkan karakter aneh & newline
+    pk = pk.replace("\\n", "\n").replace("\r", "")
+    
+    # 5. Cek kelengkapan Header dan Footer Kunci
+    if "-----BEGIN PRIVATE KEY-----" not in pk or "-----END PRIVATE KEY-----" not in pk:
+        st.error("❌ Kunci privat tidak lengkap! Teks '-----BEGIN PRIVATE KEY-----' atau '-----END PRIVATE KEY-----' terpotong saat Anda copy-paste.")
+        st.info("Solusi: Buka lagi file JSON asli di Notepad, pastikan blok kunci privat Anda blokir semuanya dari ujung ke ujung tanpa ada karakter tertinggal.")
+        st.stop()
+        
+    lines = [line.strip() for line in pk.split("\n") if line.strip()]
+    creds_dict["private_key"] = "\n".join(lines)
             
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
-    return gspread.authorize(creds)
+    # 6. Coba hubungkan ke Google
+    try:
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"❌ Kunci privat ditolak oleh sistem Google: {e}")
+        st.info("💡 Tips Paling Ampuh: Masuk ke Google Cloud Console, hapus Key lama Anda, buat/download 'Key JSON Baru', lalu paste isinya ke Secrets aplikasi.")
+        st.stop()
 
 @st.cache_resource
 def get_sheets_connection():
@@ -79,7 +105,7 @@ def save_data_to_sheets():
     if rows_isi:
         sheet_isi.append_rows(rows_isi)
 
-if "rak_gudang_tan_posisi" not in st.session_state:
+if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
 
 st.markdown("<h1 style='text-align: center;'>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
