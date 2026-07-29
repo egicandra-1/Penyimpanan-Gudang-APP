@@ -18,9 +18,13 @@ def init_connection_v3():
     # Ubah teks mentah menjadi dictionary Python
     creds_dict = json.loads(json_text)
     
-    # PERBAIKAN: Paksa ubah teks \n menjadi enter (baris baru) yang sesungguhnya
     if "private_key" in creds_dict:
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        pk = creds_dict["private_key"]
+        # 1. Ubah teks \n menjadi enter asli jika ada
+        pk = pk.replace("\\n", "\n")
+        # 2. Bersihkan spasi gaib di awal/akhir setiap baris kunci privat
+        lines = [line.strip() for line in pk.split("\n") if line.strip()]
+        creds_dict["private_key"] = "\n".join(lines)
             
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     return gspread.authorize(creds)
@@ -75,7 +79,7 @@ def save_data_to_sheets():
     if rows_isi:
         sheet_isi.append_rows(rows_isi)
 
-if "rak_gudang_tanpa_posisi" not in st.session_state:
+if "rak_gudang_tan_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
 
 st.markdown("<h1 style='text-align: center;'>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
