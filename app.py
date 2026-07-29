@@ -169,7 +169,7 @@ def ui_pencarian_visual():
                     with cols[idx % 4]:
                         st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
 
-def ui_input_mutasi():
+def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     with st.form("form_edit_slot"):
         edit_sku = st.text_input("Masukkan Kode SKU:").strip()
@@ -214,7 +214,7 @@ def ui_input_mutasi():
             else:
                 st.error(f"❌ Rak '{edit_rak}' tidak ditemukan.")
 
-    st.markdown("---")
+def ui_ambil_barang():
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
     with st.form("form_ambil_barang"):
         ambil_sku = st.text_input("Ketik Kode SKU yang Diambil:").strip()
@@ -249,7 +249,7 @@ def ui_input_mutasi():
                 else:
                     st.error(f"❌ SKU tidak ditemukan.")
 
-    st.markdown("---")
+def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     with st.form("form_mutasi_direct"):
         mutasi_sku = st.text_input("Kode SKU yang Dipindah:").strip()
@@ -287,14 +287,13 @@ if st.session_state.mode_aplikasi is None:
     
     st.markdown("<br><h3 style='text-align: center;'>Pilih Perangkat Anda:</h3>", unsafe_allow_html=True)
     
-    # Membuat tombol di tengah layar
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if st.button("💻 BUKA MODE KOMPUTER", use_container_width=True, type="primary"):
             st.session_state.mode_aplikasi = "komputer"
             st.rerun()
             
-        st.write("") # Memberi sedikit jarak antar tombol
+        st.write("") 
         
         if st.button("📱 BUKA MODE HP", use_container_width=True, type="primary"):
             st.session_state.mode_aplikasi = "hp"
@@ -310,15 +309,14 @@ else:
         st.markdown("<h1>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
         
     with col_tombol:
-        st.write("") # Penyeimbang posisi vertikal
-        # Tombol untuk kembali ke layar pilihan awal
+        st.write("") 
         if st.button("🔄 Ganti Perangkat", use_container_width=True):
             st.session_state.mode_aplikasi = None
             st.rerun()
             
     st.divider()
 
-    # Logika untuk menampilkan isi berdasarkan mode yang dipilih
+    # Logika Tampilan (Komputer vs HP)
     if st.session_state.mode_aplikasi == "komputer":
         col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
         with col_kiri:
@@ -326,12 +324,23 @@ else:
         with col_tengah:
             ui_pencarian_visual()
         with col_kanan:
-            ui_input_mutasi()
+            # Di komputer, form tetap digabung memanjang ke bawah
+            ui_input_barang()
+            st.markdown("---")
+            ui_ambil_barang()
+            st.markdown("---")
+            ui_mutasi_barang()
     else:
-        tab1, tab2, tab3 = st.tabs(["🛠️ Kelola Rak", "🔍 Cari Barang", "📝 Update & Mutasi"])
+        # Di HP, form dipecah menjadi 5 tab yang rapi dan ringkas
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "📤 Ambil", "🔄 Mutasi"])
+        
         with tab1:
             ui_manajemen_rak()
         with tab2:
             ui_pencarian_visual()
         with tab3:
-            ui_input_mutasi()
+            ui_input_barang()
+        with tab4:
+            ui_ambil_barang()
+        with tab5:
+            ui_mutasi_barang()
