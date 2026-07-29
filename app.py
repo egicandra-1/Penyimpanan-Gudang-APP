@@ -11,9 +11,26 @@ SCOPE = [
 
 @st.cache_resource
 def init_connection():
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    if "private_key" in creds_dict:
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    creds_dict = {
+        "type": "service_account",
+        "project_id": "gudangapp-503909",
+        "private_key_id": "30d7ad7404f19ba366f5e4ea14c0f1ec72e79c12",
+        "private_key": """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC35lO8dYlP0y/zh5g2
+XJq5fGv7l2k3m1n8p4q9r6s2t5u8v1w4x7y0z3A6B9C2D5E8F1G4H7I0J3K6L9M2N5O8P
+1Q4R7S0T3U6V9W2X5Y8Z1a4b7c0d3e6f9g2h5i8j1k4l7m0n3o6p9q2r5s8t1u4v7w0x3
+y6z9A2B5C8D1E4F7G0H3I6J9K2L5M8N1O4P7Q0R3S6T9U2V5W8X1Y4Z7a0b3c6d9e2f5g
+8h1i4j7k0l3m6n9o2p5q8r1s4t7u0v3w6x9y2z5A8B1C4D7E0F3G6H9I2J5K8L1M4N7O0
+P3Q6R9S2T5U8V1W4X7Y0Z3a6b9c2d5e8f1g4h7i0j3k6l9m2n5o8p1q4r7s4
+-----END PRIVATE KEY-----""",
+        "client_email": "pergudangan-bot@gudangapp-503909.iam.gserviceaccount.com",
+        "client_id": "112936613891839405088",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pergudangan-bot%40gudangapp-503909.iam.gserviceaccount.com",
+        "universe_domain": "googleapis.com"
+    }
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     return gspread.authorize(creds)
 
