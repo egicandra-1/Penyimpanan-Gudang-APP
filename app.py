@@ -10,7 +10,7 @@ SCOPE = [
 ]
 
 @st.cache_resource
-def init_connection():
+def init_connection_v2():
     creds_dict = {
         "type": "service_account",
         "project_id": "gudangapp-503909",
@@ -36,7 +36,7 @@ P3Q6R9S2T5U8V1W4X7Y0Z3a6b9c2d5e8f1g4h7i0j3k6l9m2n5o8p1q4r7s4
 
 @st.cache_resource
 def get_sheets_connection():
-    client = init_connection()
+    client = init_connection_v2()
     sheet_file = client.open("Database_Gudang")
     return sheet_file.worksheet("RAK"), sheet_file.worksheet("Isi_Gudang")
 
