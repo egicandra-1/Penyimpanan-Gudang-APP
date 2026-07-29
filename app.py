@@ -12,47 +12,37 @@ SCOPE = [
 
 @st.cache_resource
 def init_connection_v3():
-    # 1. Cek apakah Secrets ada
     if "gcp_json_teks" not in st.secrets:
-        st.error("❌ Secrets 'gcp_json_teks' tidak ditemukan di Streamlit Cloud Anda!")
+        st.error("❌ Secrets 'gcp_json_teks' tidak ditemukan!")
         st.stop()
         
     json_text = st.secrets["gcp_json_teks"]
     
-    # 2. Cek validitas format JSON
     try:
         creds_dict = json.loads(json_text)
     except Exception as e:
-        st.error(f"❌ Format JSON di Secrets rusak atau salah ketik: {e}")
-        st.info("Pastikan isi Secrets diawali tanda { dan diakhiri tanda } serta diapit oleh tiga kutip satu (''')")
+        st.error(f"❌ Format JSON di Secrets rusak: {e}")
         st.stop()
     
-    # 3. Cek kolom private_key
     if "private_key" not in creds_dict:
-        st.error("❌ File JSON Anda tidak memiliki kolom 'private_key'. Anda mungkin salah mendownload jenis file JSON (Pastikan mendownload file JSON dari 'Service Account Key', bukan OAuth Client).")
+        st.error("❌ File JSON tidak memiliki 'private_key'.")
         st.stop()
         
     pk = creds_dict["private_key"]
-    
-    # 4. Bersihkan karakter aneh & newline
     pk = pk.replace("\\n", "\n").replace("\r", "")
     
-    # 5. Cek kelengkapan Header dan Footer Kunci
     if "-----BEGIN PRIVATE KEY-----" not in pk or "-----END PRIVATE KEY-----" not in pk:
-        st.error("❌ Kunci privat tidak lengkap! Teks '-----BEGIN PRIVATE KEY-----' atau '-----END PRIVATE KEY-----' terpotong saat Anda copy-paste.")
-        st.info("Solusi: Buka lagi file JSON asli di Notepad, pastikan blok kunci privat Anda blokir semuanya dari ujung ke ujung tanpa ada karakter tertinggal.")
+        st.error("❌ Kunci privat tidak lengkap terpotong!")
         st.stop()
         
     lines = [line.strip() for line in pk.split("\n") if line.strip()]
     creds_dict["private_key"] = "\n".join(lines)
             
-    # 6. Coba hubungkan ke Google
     try:
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
         return gspread.authorize(creds)
     except Exception as e:
-        st.error(f"❌ Kunci privat ditolak oleh sistem Google: {e}")
-        st.info("💡 Tips Paling Ampuh: Masuk ke Google Cloud Console, hapus Key lama Anda, buat/download 'Key JSON Baru', lalu paste isinya ke Secrets aplikasi.")
+        st.error(f"❌ Kunci privat ditolak Google: {e}")
         st.stop()
 
 @st.cache_resource
@@ -82,24 +72,19 @@ def load_data_from_sheets():
         stok = item.get("stok")
         if r_nama in struktur:
             struktur[r_nama].append({"sku": str(sku), "stok": int(stok) if str(stok).isdigit() else 0})
-
     return struktur
 
 def save_data_to_sheets():
     sheet_rak.clear()
     sheet_isi.clear()
-
     sheet_rak.append_row(["nama_rak"])
     sheet_isi.append_row(["nama_rak", "sku", "stok"])
-
     rows_rak = []
     rows_isi = []
-
     for r_nama, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
         rows_rak.append([r_nama])
         for item in daftar_item:
             rows_isi.append([r_nama, item["sku"], item["stok"]])
-
     if rows_rak:
         sheet_rak.append_rows(rows_rak)
     if rows_isi:
@@ -108,17 +93,11 @@ def save_data_to_sheets():
 if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
 
-st.markdown("<h1 style='text-align: center;'>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
-st.divider()
+# ==================== FUNGSI TAMPILAN ====================
 
-col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
-
-with col_kiri:
+def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
     st.markdown("#### 🗄️ Kelola Rak")
-
     opsi_rak = ["[+ Tambah Rak Baru]"] + list(st.session_state.rak_gudang_tanpa_posisi.keys())
     rak_terpilih_mgt = st.selectbox("Pilih Tindakan / Nama Rak:", opsi_rak, key="rak_action_select")
 
@@ -129,7 +108,7 @@ with col_kiri:
                 if t_rak not in st.session_state.rak_gudang_tanpa_posisi:
                     st.session_state.rak_gudang_tanpa_posisi[t_rak] = []
                     save_data_to_sheets()
-                    st.success(f"Rak '{t_rak}' berhasil ditambahkan!")
+                    st.success(f"Rak '{t_rak}' ditambahkan!")
                     st.rerun()
                 else:
                     st.error("Nama rak sudah ada.")
@@ -152,7 +131,7 @@ with col_kiri:
                 st.warning(f"'{rak_terpilih_mgt}' dihapus!")
                 st.rerun()
 
-with col_tengah:
+def ui_pencarian_visual():
     st.markdown("### 🔍 Pencarian Barang")
     search_query = st.text_input("Masukkan Kode SKU:", placeholder="Contoh: ketik 'mj' atau '459'...", key="main_search_input").strip()
 
@@ -164,14 +143,14 @@ with col_tengah:
                     hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
 
         if hasil_cari:
-            st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan barang:")
+            st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan:")
             for hasil in hasil_cari:
-                st.info(f"📦 SKU: **`{hasil['sku_penuh']}`** 📍 Rak: **{hasil['rak']}** (Jumlah Stok: {hasil['stok']})")
+                st.info(f"📦 SKU: **`{hasil['sku_penuh']}`** 📍 Rak: **{hasil['rak']}** (Stok: {hasil['stok']})")
         else:
-            st.error(f"❌ Tidak ada SKU yang mengandung kata '{search_query}' di rak manapun.")
+            st.error(f"❌ Tidak ada SKU '{search_query}' di rak manapun.")
 
     st.markdown("---")
-    st.markdown("### 📊 Visualisasi Isi Seluruh Rak")
+    st.markdown("### 📊 Visualisasi Isi Rak")
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
@@ -185,24 +164,24 @@ with col_tengah:
                     with cols[idx % 4]:
                         st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
 
-with col_kanan:
-    st.markdown("### 📝 Input / Update Barang ke Rak")
+def ui_input_mutasi():
+    st.markdown("### 📝 Input / Update ke Rak")
     with st.form("form_edit_slot"):
         edit_sku = st.text_input("Masukkan Kode SKU:").strip()
-        edit_stok_raw = st.text_input("Jumlah Stok:", placeholder="Contoh: 500").strip()
-        edit_rak = st.text_input("Ketik Nama Rak Tujuan:", placeholder="Contoh: a2, a3").strip()
+        edit_stok_raw = st.text_input("Jumlah Stok:").strip()
+        edit_rak = st.text_input("Ketik Nama Rak Tujuan:").strip()
 
         c_b1, c_b2 = st.columns(2)
         with c_b1:
             btn_simpan = st.form_submit_button("Simpan ke Rak")
         with c_b2:
-            btn_hapus = st.form_submit_button("Hapus SKU dari Rak")
+            btn_hapus = st.form_submit_button("Hapus SKU")
 
         if btn_simpan and edit_sku:
             if not edit_stok_raw.isdigit():
-                st.error("❌ Jumlah Stok harus diisi menggunakan angka saja!")
+                st.error("❌ Stok harus angka!")
             elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.error(f"❌ Gagal! Rak '{edit_rak}' tidak terdaftar.")
+                st.error(f"❌ Rak '{edit_rak}' tidak terdaftar.")
             else:
                 edit_stok = int(edit_stok_raw)
                 rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
@@ -215,7 +194,7 @@ with col_kanan:
                 if not found:
                     rak_items.append({"sku": edit_sku, "stok": edit_stok})
                 save_data_to_sheets()
-                st.success(f"Berhasil! Data disimpan di '{edit_rak}'.")
+                st.success(f"Disimpan di '{edit_rak}'.")
                 st.rerun()
 
         if btn_hapus and edit_sku:
@@ -225,7 +204,7 @@ with col_kanan:
                     if item["sku"].lower() != edit_sku.lower()
                 ]
                 save_data_to_sheets()
-                st.warning(f"Semua SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
+                st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
                 st.rerun()
             else:
                 st.error(f"❌ Rak '{edit_rak}' tidak ditemukan.")
@@ -233,15 +212,15 @@ with col_kanan:
     st.markdown("---")
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
     with st.form("form_ambil_barang"):
-        ambil_sku = st.text_input("Ketik Kode SKU yang Diambil:", placeholder="Contoh: mj459").strip()
-        ambil_jumlah_raw = st.text_input("Jumlah yang Diambil:", placeholder="Contoh: 100").strip()
-        ambil_rak = st.text_input("Ketik Nama Rak Asal Barang:", placeholder="Contoh: a2").strip()
+        ambil_sku = st.text_input("Ketik Kode SKU yang Diambil:").strip()
+        ambil_jumlah_raw = st.text_input("Jumlah yang Diambil:").strip()
+        ambil_rak = st.text_input("Ketik Nama Rak Asal:").strip()
 
         if st.form_submit_button("Proses Ambil Barang") and ambil_sku:
             if not ambil_jumlah_raw.isdigit():
-                st.error("❌ Jumlah ambil harus berupa angka saja!")
+                st.error("❌ Jumlah ambil harus angka!")
             elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.error(f"❌ Gagal! Rak '{ambil_rak}' tidak ditemukan.")
+                st.error(f"❌ Rak '{ambil_rak}' tidak ditemukan.")
             else:
                 jumlah_ambil = int(ambil_jumlah_raw)
                 rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
@@ -250,50 +229,76 @@ with col_kanan:
                     if item["sku"].lower() == ambil_sku.lower():
                         item_ditemukan = item
                         break
-
                 if item_ditemukan:
                     stok_sekarang = item_ditemukan["stok"]
                     if jumlah_ambil >= stok_sekarang:
                         rak_items.remove(item_ditemukan)
                         save_data_to_sheets()
-                        st.warning(f"⚠️ Stok habis! SKU '{ambil_sku}' dihapus dari rak '{ambil_rak}'.")
+                        st.warning(f"⚠️ Stok habis! '{ambil_sku}' dihapus.")
                         st.rerun()
                     else:
                         item_ditemukan["stok"] -= jumlah_ambil
                         save_data_to_sheets()
-                        st.success(f"Berhasil mengambil {jumlah_ambil} pcs.")
+                        st.success(f"Berhasil ambil {jumlah_ambil} pcs.")
                         st.rerun()
                 else:
-                    st.error(f"❌ SKU '{ambil_sku}' tidak ditemukan di rak '{ambil_rak}'.")
+                    st.error(f"❌ SKU tidak ditemukan.")
 
     st.markdown("---")
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     with st.form("form_mutasi_direct"):
-        mutasi_sku = st.text_input("Ketik Kode SKU yang Akan Dipindah:", placeholder="Contoh: mj459").strip()
-        mutasi_asal = st.text_input("Ketik Nama Rak Asal Barang:", placeholder="Contoh: a3").strip()
-        tujuan_rak = st.text_input("Ketik Nama Rak Tujuan Mutasi:", placeholder="Contoh: a2").strip()
+        mutasi_sku = st.text_input("Kode SKU yang Dipindah:").strip()
+        mutasi_asal = st.text_input("Nama Rak Asal:").strip()
+        tujuan_rak = st.text_input("Nama Rak Tujuan:").strip()
 
-        if st.form_submit_button("Eksekusi Pindah Rak"):
-            if mutasi_asal not in st.session_state.rak_gudang_tanpa_posisi:
-                st.error(f"❌ Gagal! Rak Asal '{mutasi_asal}' tidak ada.")
-            elif tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.error(f"❌ Gagal! Rak Tujuan '{tujuan_rak}' tidak ada.")
+        if st.form_submit_button("Pindah Rak"):
+            if mutasi_asal not in st.session_state.rak_gudang_tanpa_posisi or tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
+                st.error("❌ Rak Asal / Tujuan tidak valid.")
             elif mutasi_asal == tujuan_rak:
-                st.error("❌ Gagal! Rak tujuan tidak boleh sama.")
+                st.error("❌ Rak tujuan tidak boleh sama.")
             else:
                 rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
-                item_ditemukan = None
-                for item in rak_asal_items:
-                    if item["sku"] == mutasi_sku:
-                        item_ditemukan = item
-                        break
-
+                item_ditemukan = next((item for item in rak_asal_items if item["sku"] == mutasi_sku), None)
                 if item_ditemukan:
                     stok_yang_ikut = item_ditemukan["stok"]
                     rak_asal_items.remove(item_ditemukan)
                     st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": mutasi_sku, "stok": stok_yang_ikut})
                     save_data_to_sheets()
-                    st.success(f"Sukses memindahkan SKU '{mutasi_sku}' ke '{tujuan_rak}'.")
+                    st.success(f"Dipindah ke '{tujuan_rak}'.")
                     st.rerun()
                 else:
-                    st.error(f"❌ SKU '{mutasi_sku}' tidak ditemukan di '{mutasi_asal}'.")
+                    st.error(f"❌ SKU tidak ditemukan di '{mutasi_asal}'.")
+
+# ==================== RENDER APLIKASI UTAMA ====================
+
+st.markdown("<h1 style='text-align: center;'>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
+
+# Tombol Pintar untuk memilih layar (Data akan tersimpan walau layar direfresh)
+mode_tampilan = st.radio(
+    "Pilih Tampilan Layar (Sesuaikan dengan perangkat Anda):",
+    ["💻 Mode Komputer (3 Kolom)", "📱 Mode HP (Tab Menu)"],
+    horizontal=True,
+    key="penyimpanan_mode_layar"
+)
+st.divider()
+
+if mode_tampilan == "💻 Mode Komputer (3 Kolom)":
+    # Tampilan Komputer: 3 Kolom sejajar
+    col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
+    with col_kiri:
+        ui_manajemen_rak()
+    with col_tengah:
+        ui_pencarian_visual()
+    with col_kanan:
+        ui_input_mutasi()
+else:
+    # Tampilan HP: 3 Tab Menu yang ringkas
+    tab1, tab2, tab3 = st.tabs(["🛠️ Kelola Rak", "🔍 Cari Barang", "📝 Update & Mutasi"])
+    with tab1:
+        ui_manajemen_rak()
+    with tab2:
+        ui_pencarian_visual()
+    with tab3:
+        ui_input_mutasi()
