@@ -14,10 +14,15 @@ SCOPE = [
 def init_connection():
     if "gcp_service_account" in st.secrets:
         sec = st.secrets["gcp_service_account"]
-        # Membersihkan format private key dari string escape \n
-        raw_key = str(sec["private_key"])
-        fixed_key = raw_key.replace("\\n", "\n")
         
+        # Membersihkan dan merapikan private key secara otomatis (mengatasi format \n mentah maupun spasi berlebih)
+        raw_key = str(sec["private_key"])
+        fixed_key = raw_key.replace("\\n", "\n").strip()
+        if not fixed_key.startswith("-----BEGIN PRIVATE KEY-----"):
+            # Jika terpaksa digabung satu baris, kembalikan format pemisah baris standarnya
+            fixed_key = fixed_key.replace("BEGIN PRIVATE KEY-----", "BEGIN PRIVATE KEY-----\n")
+            fixed_key = fixed_key.replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
+            
         creds_dict = {
             "type": str(sec["type"]),
             "project_id": str(sec["project_id"]),
