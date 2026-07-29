@@ -93,7 +93,12 @@ def save_data_to_sheets():
 if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
 
-# ==================== FUNGSI TAMPILAN ====================
+# Simpan status pilihan layar pengguna di memori
+if "mode_aplikasi" not in st.session_state:
+    st.session_state.mode_aplikasi = None
+
+
+# ==================== FUNGSI TAMPILAN (UI) ====================
 
 def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
@@ -269,36 +274,64 @@ def ui_input_mutasi():
                 else:
                     st.error(f"❌ SKU tidak ditemukan di '{mutasi_asal}'.")
 
+
 # ==================== RENDER APLIKASI UTAMA ====================
 
-st.markdown("<h1 style='text-align: center;'>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
+if st.session_state.mode_aplikasi is None:
+    # ---------------------------------------------------------
+    # HALAMAN AWAL (LANDING PAGE)
+    # ---------------------------------------------------------
+    st.markdown("<br><br><h1 style='text-align: center;'>📦 Selamat Datang di Sistem Gudang</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
+    
+    st.markdown("<br><h3 style='text-align: center;'>Pilih Perangkat Anda:</h3>", unsafe_allow_html=True)
+    
+    # Membuat tombol di tengah layar
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        if st.button("💻 BUKA MODE KOMPUTER", use_container_width=True, type="primary"):
+            st.session_state.mode_aplikasi = "komputer"
+            st.rerun()
+            
+        st.write("") # Memberi sedikit jarak antar tombol
+        
+        if st.button("📱 BUKA MODE HP", use_container_width=True, type="primary"):
+            st.session_state.mode_aplikasi = "hp"
+            st.rerun()
 
-# Tombol Pintar untuk memilih layar (Data akan tersimpan walau layar direfresh)
-mode_tampilan = st.radio(
-    "Pilih Tampilan Layar (Sesuaikan dengan perangkat Anda):",
-    ["💻 Mode Komputer (3 Kolom)", "📱 Mode HP (Tab Menu)"],
-    horizontal=True,
-    key="penyimpanan_mode_layar"
-)
-st.divider()
-
-if mode_tampilan == "💻 Mode Komputer (3 Kolom)":
-    # Tampilan Komputer: 3 Kolom sejajar
-    col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
-    with col_kiri:
-        ui_manajemen_rak()
-    with col_tengah:
-        ui_pencarian_visual()
-    with col_kanan:
-        ui_input_mutasi()
 else:
-    # Tampilan HP: 3 Tab Menu yang ringkas
-    tab1, tab2, tab3 = st.tabs(["🛠️ Kelola Rak", "🔍 Cari Barang", "📝 Update & Mutasi"])
-    with tab1:
-        ui_manajemen_rak()
-    with tab2:
-        ui_pencarian_visual()
-    with tab3:
-        ui_input_mutasi()
+    # ---------------------------------------------------------
+    # HALAMAN DASHBOARD UTAMA (SETELAH MASUK)
+    # ---------------------------------------------------------
+    col_judul, col_tombol = st.columns([4, 1])
+    
+    with col_judul:
+        st.markdown("<h1>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
+        
+    with col_tombol:
+        st.write("") # Penyeimbang posisi vertikal
+        # Tombol untuk kembali ke layar pilihan awal
+        if st.button("🔄 Ganti Perangkat", use_container_width=True):
+            st.session_state.mode_aplikasi = None
+            st.rerun()
+            
+    st.divider()
+
+    # Logika untuk menampilkan isi berdasarkan mode yang dipilih
+    if st.session_state.mode_aplikasi == "komputer":
+        col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
+        with col_kiri:
+            ui_manajemen_rak()
+        with col_tengah:
+            ui_pencarian_visual()
+        with col_kanan:
+            ui_input_mutasi()
+    else:
+        tab1, tab2, tab3 = st.tabs(["🛠️ Kelola Rak", "🔍 Cari Barang", "📝 Update & Mutasi"])
+        with tab1:
+            ui_manajemen_rak()
+        with tab2:
+            ui_pencarian_visual()
+        with tab3:
+            ui_input_mutasi()
