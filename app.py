@@ -13,7 +13,10 @@ SCOPE = [
 def init_connection_v3():
     creds_dict = dict(st.secrets["gcp_service_account"])
     if "private_key" in creds_dict:
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        pk = creds_dict["private_key"]
+        if "\\n" in pk:
+            creds_dict["private_key"] = pk.replace("\\n", "\n")
+            
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     return gspread.authorize(creds)
 
