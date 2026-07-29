@@ -1,6 +1,7 @@
 from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
+import json
 
 st.set_page_config(page_title="Sistem Slotting Rak Sederhana", layout="wide")
 
@@ -11,11 +12,11 @@ SCOPE = [
 
 @st.cache_resource
 def init_connection_v3():
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    if "private_key" in creds_dict:
-        pk = creds_dict["private_key"]
-        if "\\n" in pk:
-            creds_dict["private_key"] = pk.replace("\\n", "\n")
+    # Ambil teks mentah JSON dari Secrets
+    json_text = st.secrets["gcp_json_teks"]
+    
+    # Ubah teks mentah menjadi dictionary Python
+    creds_dict = json.loads(json_text)
             
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     return gspread.authorize(creds)
