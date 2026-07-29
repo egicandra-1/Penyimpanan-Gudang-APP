@@ -13,7 +13,24 @@ SCOPE = [
 @st.cache_resource
 def init_connection():
     if "gcp_service_account" in st.secrets:
-        creds_dict = dict(st.secrets["gcp_service_account"])
+        sec = st.secrets["gcp_service_account"]
+        # Membersihkan format private key dari string escape \n
+        raw_key = str(sec["private_key"])
+        fixed_key = raw_key.replace("\\n", "\n")
+        
+        creds_dict = {
+            "type": str(sec["type"]),
+            "project_id": str(sec["project_id"]),
+            "private_key_id": str(sec["private_key_id"]),
+            "private_key": fixed_key,
+            "client_email": str(sec["client_email"]),
+            "client_id": str(sec["client_id"]),
+            "auth_uri": str(sec["auth_uri"]),
+            "token_uri": str(sec["token_uri"]),
+            "auth_provider_x509_cert_url": str(sec["auth_provider_x509_cert_url"]),
+            "client_x509_cert_url": str(sec["client_x509_cert_url"]),
+            "universe_domain": str(sec.get("universe_domain", "googleapis.com"))
+        }
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
     else:
         json_path = os.path.join(os.path.dirname(__file__), "credentials.json")
