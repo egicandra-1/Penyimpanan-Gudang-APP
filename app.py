@@ -12,35 +12,13 @@ SCOPE = [
 
 @st.cache_resource
 def init_connection():
-    if "gcp_service_account" in st.secrets:
-        sec = st.secrets["gcp_service_account"]
+    # Membaca langsung dari file credentials.json di dalam repository
+    json_path = os.path.join(os.path.dirname(__file__), "credentials.json")
+    if not os.path.exists(json_path):
+        st.error("File 'credentials.json' tidak ditemukan di dalam repository GitHub Anda!")
+        st.stop()
         
-        # Membersihkan dan merapikan private key secara otomatis (mengatasi format \n mentah maupun spasi berlebih)
-        raw_key = str(sec["private_key"])
-        fixed_key = raw_key.replace("\\n", "\n").strip()
-        if not fixed_key.startswith("-----BEGIN PRIVATE KEY-----"):
-            # Jika terpaksa digabung satu baris, kembalikan format pemisah baris standarnya
-            fixed_key = fixed_key.replace("BEGIN PRIVATE KEY-----", "BEGIN PRIVATE KEY-----\n")
-            fixed_key = fixed_key.replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
-            
-        creds_dict = {
-            "type": str(sec["type"]),
-            "project_id": str(sec["project_id"]),
-            "private_key_id": str(sec["private_key_id"]),
-            "private_key": fixed_key,
-            "client_email": str(sec["client_email"]),
-            "client_id": str(sec["client_id"]),
-            "auth_uri": str(sec["auth_uri"]),
-            "token_uri": str(sec["token_uri"]),
-            "auth_provider_x509_cert_url": str(sec["auth_provider_x509_cert_url"]),
-            "client_x509_cert_url": str(sec["client_x509_cert_url"]),
-            "universe_domain": str(sec.get("universe_domain", "googleapis.com"))
-        }
-        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
-    else:
-        json_path = os.path.join(os.path.dirname(__file__), "credentials.json")
-        creds = Credentials.from_service_account_file(json_path, scopes=SCOPE)
-        
+    creds = Credentials.from_service_account_file(json_path, scopes=SCOPE)
     return gspread.authorize(creds)
 
 client = init_connection()
