@@ -233,18 +233,12 @@ def ui_ambil_barang():
 
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} 
-        
-    # KUNCI SOLUSI: Counter untuk membuat ID kotak input selalu baru setiap kali discan
-    if "scan_counter" not in st.session_state:
-        st.session_state.scan_counter = 0
 
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        # Mengambil nilai dari kotak input yang terhubung dengan counter saat ini
-        current_key = f"quick_scan_input_{st.session_state.scan_counter}"
-        raw_val = st.session_state[current_key].strip()
-        
+        # Membaca nilai dengan ID statis agar fokus kursor tidak pernah terputus
+        raw_val = st.session_state.quick_scan_input.strip()
         if not raw_val:
             return
 
@@ -252,34 +246,38 @@ def ui_ambil_barang():
         
         if not rak_terpilih:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
-            st.session_state.scan_counter += 1 # Paksa buat kotak baru
+            st.session_state.quick_scan_input = ""
             return
             
         if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
-            st.session_state.scan_counter += 1
+            st.session_state.quick_scan_input = ""
             return
 
         sku_terdeteksi = None
         daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
+        # LOGIKA CERDAS BARU: Membaca dari akhir teks untuk mendeteksi scan terbaru (mencegah salah baca bila menumpuk)
         for real_sku in daftar_sku_rak:
-            if real_sku.lower() in raw_val.lower():
+            if raw_val.lower().endswith(real_sku.lower()):
                 sku_terdeteksi = real_sku
                 break
         
+        # Fallback jika tidak ditemukan di akhir
         if not sku_terdeteksi:
-            sku_salah = raw_val.split()[0] if " " in raw_val else raw_val[:10]
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{sku_salah}' tidak ada di rak '{rak_terpilih}'!"}
-            st.session_state.scan_counter += 1
+            for real_sku in daftar_sku_rak:
+                if real_sku.lower() in raw_val.lower():
+                    sku_terdeteksi = real_sku
+                    break
+        
+        if not sku_terdeteksi:
+            sku_salah = raw_val.split()[-1] if " " in raw_val else raw_val[-10:]
+            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU tidak dikenali di rak '{rak_terpilih}'!"}
+            st.session_state.quick_scan_input = ""
             return
 
-        # Tetap menghitung jumlah tumpukan (untuk berjaga-jaga jika 2 tembakan scanner tertangkap di 1 frame)
+        # PENCEGAH BOLA SALJU (SNOWBALL): Sebanyak apapun teks menumpuk, setiap kali scanner berbunyi (Enter), hanya dihitung +1
         jumlah_scan = 1
-        if sku_terdeteksi.lower() in raw_val.lower():
-            hitung_kemunculan = raw_val.lower().count(sku_terdeteksi.lower())
-            if hitung_kemunculan > 0:
-                jumlah_scan = hitung_kemunculan
 
         if sku_terdeteksi in st.session_state.scan_cart:
             st.session_state.scan_cart[sku_terdeteksi] += jumlah_scan
@@ -288,13 +286,13 @@ def ui_ambil_barang():
             
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
         
-        # MENGHANCURKAN KOTAK LAMA: Menambah counter akan membuat key kotak input berubah total
-        st.session_state.scan_counter += 1
+        # Kosongkan kotak secara internal (kursor tetap diam di tempat)
+        st.session_state.quick_scan_input = ""
 
-    # Kotak input memanggil ID dengan scan_counter (selalu bersih!)
+    # Menggunakan ID statis kembali
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
-        key=f"quick_scan_input_{st.session_state.scan_counter}", 
+        key="quick_scan_input", 
         on_change=process_scanned_sku,
         placeholder="Arahkan scanner ke barcode..."
     )
