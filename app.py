@@ -101,6 +101,17 @@ if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
 
+# ====================================================================================
+# PEMBERSIH KOLOM INPUT DARI ATAS (MENCEGAH STREAMLIT API EXCEPTION / LAYAR MERAH)
+# ====================================================================================
+if "global_notif" in st.session_state and st.session_state.global_notif:
+    tab_to_clear = st.session_state.global_notif["tab"]
+    if tab_to_clear == "input":
+        if "input_sku_field" in st.session_state: st.session_state.input_sku_field = ""
+        if "input_stok_field" in st.session_state: st.session_state.input_stok_field = ""
+        if "input_rak_field" in st.session_state: st.session_state.input_rak_field = ""
+
+
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
 def ui_manajemen_rak():
@@ -205,10 +216,6 @@ def ui_input_barang():
             rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
             rak_items.append({"sku": edit_sku, "stok": edit_stok})
             save_data_to_sheets()
-            # MENGOSONGKAN KOTAK INPUT INPUT SETELAH BERHASIL
-            st.session_state.input_sku_field = ""
-            st.session_state.input_stok_field = ""
-            st.session_state.input_rak_field = ""
             st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'."}
             st.rerun()
 
@@ -222,10 +229,6 @@ def ui_input_barang():
             if len(filtered_rak) < len(rak_lama):
                 st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
                 save_data_to_sheets()
-                # MENGOSONGKAN KOTAK INPUT SETELAH HAPUS
-                st.session_state.input_sku_field = ""
-                st.session_state.input_stok_field = ""
-                st.session_state.input_rak_field = ""
                 st.session_state.global_notif = {"tab": "input", "type": "warning", "text": f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!"}
                 st.rerun()
             else:
@@ -566,11 +569,5 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
     # Tunggu 2 detik agar notifikasi bisa dibaca, lalu bersihkan layar!
     time.sleep(2)
     
-    # JIKA BERHASIL DI TAB INPUT, KOSONGKAN KEMBALI KOLOM-KOLOM INPUT NYA
-    if tab_aktif == "input":
-        if "input_sku_field" in st.session_state: st.session_state.input_sku_field = ""
-        if "input_stok_field" in st.session_state: st.session_state.input_stok_field = ""
-        if "input_rak_field" in st.session_state: st.session_state.input_rak_field = ""
-
     st.session_state.global_notif = None
     st.rerun()
