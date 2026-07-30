@@ -102,14 +102,12 @@ if "mode_aplikasi" not in st.session_state:
 def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
     
-    # Menyiapkan memori untuk pesan notifikasi rak agar tidak hilang saat direfresh
     if "pesan_sukses_rak" not in st.session_state:
         st.session_state.pesan_sukses_rak = ""
         
-    # Jika ada pesan sukses dari proses sebelumnya, tampilkan di sini
     if st.session_state.pesan_sukses_rak:
         st.success(st.session_state.pesan_sukses_rak)
-        st.session_state.pesan_sukses_rak = "" # Kosongkan setelah ditampilkan agar tidak muncul terus-menerus
+        st.session_state.pesan_sukses_rak = "" 
 
     st.markdown("#### 🗄️ Kelola Rak")
     opsi_rak = ["[+ Tambah Rak Baru]"] + list(st.session_state.rak_gudang_tanpa_posisi.keys())
@@ -239,7 +237,7 @@ def ui_ambil_barang():
     st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
 
     if "scan_cart" not in st.session_state:
-        st.session_state.scan_cart = {} # Format: {sku: jumlah}
+        st.session_state.scan_cart = {} 
     if "error_ambil_pesan" not in st.session_state:
         st.session_state.error_ambil_pesan = ""
     if "success_ambil_pesan" not in st.session_state:
@@ -262,7 +260,6 @@ def ui_ambil_barang():
 
         rak_terpilih = st.session_state.ambil_rak_field.strip()
         
-        # Validasi 1: Pastikan Rak Asal sudah diisi dan terdaftar
         if not rak_terpilih:
             st.session_state.error_ambil_pesan = "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"
             st.session_state.quick_scan_input = ""
@@ -273,7 +270,6 @@ def ui_ambil_barang():
             st.session_state.quick_scan_input = ""
             return
 
-        # Validasi 2: Cari SKU HANYA di dalam Rak Asal tersebut
         sku_terdeteksi = None
         daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
@@ -282,34 +278,27 @@ def ui_ambil_barang():
                 sku_terdeteksi = real_sku
                 break
         
-        # JIKA SKU TIDAK ADA DI RAK ASAL, TOLAK DAN MUNCULKAN ERROR
         if not sku_terdeteksi:
-            # Mengambil potongan teks yang di-scan untuk ditampilkan di pesan error
             sku_salah = raw_val.split()[0] if " " in raw_val else raw_val[:10]
             st.session_state.error_ambil_pesan = f"❌ DITOLAK! SKU '{sku_salah}' tidak ada di rak '{rak_terpilih}'!"
             st.session_state.quick_scan_input = ""
             return
 
-        # Jika lolos validasi, bersihkan pesan error
         st.session_state.error_ambil_pesan = ""
 
-        # Hitung kemunculan (jika ter-scan ganda cepat)
         jumlah_scan = 1
         if sku_terdeteksi.lower() in raw_val.lower():
             hitung_kemunculan = raw_val.lower().count(sku_terdeteksi.lower())
             if hitung_kemunculan > 0:
                 jumlah_scan = hitung_kemunculan
 
-        # Tambah ke state keranjang
         if sku_terdeteksi in st.session_state.scan_cart:
             st.session_state.scan_cart[sku_terdeteksi] += jumlah_scan
         else:
             st.session_state.scan_cart[sku_terdeteksi] = jumlah_scan
             
-        # PENTING: Paksa sinkronisasi widget manual agar nilainya tidak me-reset kembali ke 1!
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
         
-        # Kosongkan kotak input scan
         st.session_state.quick_scan_input = ""
 
     st.text_input(
@@ -327,7 +316,6 @@ def ui_ambil_barang():
             with col1:
                 st.write(f"📦 **{sku_item}**")
             with col2:
-                # Perhatikan kita memakai key saja untuk nilainya agar tersinkron otomatis
                 new_qty = st.number_input(
                     f"Jumlah {sku_item}", 
                     min_value=1, 
@@ -381,7 +369,6 @@ def ui_ambil_barang():
                     if berhasil:
                         save_data_to_sheets()
                         st.session_state.success_ambil_pesan = "Berhasil! " + " | ".join(pesan_hasil)
-                        # Bersihkan session state dari widget
                         for sku_item in list(st.session_state.scan_cart.keys()):
                             if f"qty_num_{sku_item}" in st.session_state:
                                 del st.session_state[f"qty_num_{sku_item}"]
@@ -402,26 +389,46 @@ def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     with st.form("form_mutasi_direct"):
         mutasi_sku = st.text_input("Kode SKU yang Dipindah:").strip()
+        
+        # TAB TAMBAHAN: Untuk membedakan barang yang kodenya sama persis tapi stoknya beda
+        mutasi_jumlah = st.text_input("Jumlah Stok (Ketik angka stok untuk memilih item spesifik, cth: 5):", placeholder="Kosongkan jika hanya ada 1 jenis SKU").strip()
+        
         mutasi_asal = st.text_input("Nama Rak Asal:").strip()
         tujuan_rak = st.text_input("Nama Rak Tujuan:").strip()
 
         if st.form_submit_button("Pindah Rak"):
-            if mutasi_asal not in st.session_state.rak_gudang_tanpa_posisi or tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
+            if not mutasi_sku or not mutasi_asal or not tujuan_rak:
+                st.error("❌ SKU, Rak Asal, dan Rak Tujuan wajib diisi.")
+            elif mutasi_asal not in st.session_state.rak_gudang_tanpa_posisi or tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
                 st.error("❌ Rak Asal / Tujuan tidak valid.")
             elif mutasi_asal == tujuan_rak:
                 st.error("❌ Rak tujuan tidak boleh sama.")
             else:
                 rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
-                item_ditemukan = next((item for item in rak_asal_items if item["sku"] == mutasi_sku), None)
+                item_ditemukan = None
+                
+                # 1. Cari spesifik berdasarkan angka stok jika diisi (untuk membedakan barang kembar)
+                if mutasi_jumlah.isdigit():
+                    target_stok = int(mutasi_jumlah)
+                    item_ditemukan = next((item for item in rak_asal_items if item["sku"].lower() == mutasi_sku.lower() and item["stok"] == target_stok), None)
+                
+                # 2. Jika kolom dikosongkan atau tidak ketemu stoknya, cari berdasarkan SKU saja (yang pertama ketemu)
+                if not item_ditemukan:
+                    item_ditemukan = next((item for item in rak_asal_items if item["sku"].lower() == mutasi_sku.lower()), None)
+
                 if item_ditemukan:
                     stok_yang_ikut = item_ditemukan["stok"]
+                    sku_asli = item_ditemukan["sku"]
                     rak_asal_items.remove(item_ditemukan)
-                    st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": mutasi_sku, "stok": stok_yang_ikut})
+                    st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": sku_asli, "stok": stok_yang_ikut})
                     save_data_to_sheets()
-                    st.success(f"Dipindah ke '{tujuan_rak}'.")
+                    st.success(f"Berhasil memindah SKU '{sku_asli}' (Stok: {stok_yang_ikut}) ke '{tujuan_rak}'.")
                     st.rerun()
                 else:
-                    st.error(f"❌ SKU tidak ditemukan di '{mutasi_asal}'.")
+                    if mutasi_jumlah.isdigit():
+                        st.error(f"❌ SKU '{mutasi_sku}' dengan stok '{mutasi_jumlah}' tidak ditemukan di '{mutasi_asal}'.")
+                    else:
+                        st.error(f"❌ SKU '{mutasi_sku}' tidak ditemukan di '{mutasi_asal}'.")
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
