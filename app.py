@@ -99,6 +99,10 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
+# Inisialisasi counter versi untuk reset instan widget input tanpa error API
+if "input_version" not in st.session_state:
+    st.session_state.input_version = 0
+
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
@@ -183,10 +187,11 @@ def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     placeholders["input"] = st.empty() 
 
-    # Input manual biasa tanpa form agar bebas dari teks 'Press Enter to submit form'
-    edit_sku = st.text_input("Masukkan Kode SKU:", key="input_sku_field").strip()
-    edit_stok_raw = st.text_input("Jumlah Stok:", key="input_stok_field").strip()
-    edit_rak = st.text_input("Ketik Nama Rak Tujuan:", key="input_rak_field").strip()
+    # Menggunakan dynamic key berdasarkan input_version agar kolom otomatis reset bersih instan tanpa error API
+    v = st.session_state.input_version
+    edit_sku = st.text_input("Masukkan Kode SKU:", key=f"input_sku_field_{v}").strip()
+    edit_stok_raw = st.text_input("Jumlah Stok:", key=f"input_stok_field_{v}").strip()
+    edit_rak = st.text_input("Ketik Nama Rak Tujuan:", key=f"input_rak_field_{v}").strip()
 
     c_b1, c_b2 = st.columns(2)
     with c_b1:
@@ -210,9 +215,8 @@ def ui_input_barang():
             rak_items.append({"sku": edit_sku, "stok": edit_stok})
             save_data_to_sheets()
             
-            # Kosongkan kolom input secara instan tanpa jeda waktu dan tanpa auto-refresh yang mengganggu
-            st.session_state.input_sku_field = ""
-            st.session_state.input_stok_field = ""
+            # Reset versi input agar kolom langsung bersih instan tanpa error
+            st.session_state.input_version += 1
             st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'."}
             st.rerun()
 
@@ -226,8 +230,7 @@ def ui_input_barang():
             if len(filtered_rak) < len(rak_lama):
                 st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
                 save_data_to_sheets()
-                st.session_state.input_sku_field = ""
-                st.session_state.input_stok_field = ""
+                st.session_state.input_version += 1
                 st.session_state.global_notif = {"tab": "input", "type": "warning", "text": f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!"}
                 st.rerun()
             else:
