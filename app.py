@@ -2,6 +2,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
 import json
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Slotting Rak Sederhana", layout="wide")
 
@@ -95,6 +96,20 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
+
+# Fungsi untuk memaksa kursor fokus ke kotak input otomatis via JavaScript
+def auto_focus_script():
+    js = """
+    <script>
+        const inputs = window.parent.document.querySelectorAll("input[type='text']");
+        if (inputs.length > 0) {
+            // Ambil kotak input aktif terakhir di layar
+            const targetInput = inputs[inputs.length - 1];
+            targetInput.focus();
+        }
+    </script>
+    """
+    components.html(js, height=0, width=0)
 
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
@@ -271,6 +286,8 @@ def ui_input_barang(prefix_key=""):
                     st.rerun()
                 else:
                     st.error(f"❌ Rak '{h_rak}' tidak ditemukan.")
+                    
+    auto_focus_script()
 
 def ui_ambil_barang(prefix_key=""):
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
@@ -374,6 +391,8 @@ def ui_ambil_barang(prefix_key=""):
                         st.rerun()
                     else:
                         st.error(f"❌ SKU '{sku_val}' tidak ditemukan di rak '{rak_input}'.")
+                        
+    auto_focus_script()
 
 def ui_mutasi_barang(prefix_key=""):
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
@@ -386,7 +405,6 @@ def ui_mutasi_barang(prefix_key=""):
 
     current_step = st.session_state[f"step_mutasi_{prefix_key}"]
 
-    # --- LANGKAH 1: KODE SKU ---
     if current_step >= 1:
         with st.form(f"form_mutasi_sku_{prefix_key}"):
             sku_input = st.text_input("1️⃣ Kode SKU yang Dipindah:", value=st.session_state[f"val_mutasi_sku_{prefix_key}"], placeholder="Ketik atau scan SKU lalu Enter...").strip()
@@ -397,7 +415,6 @@ def ui_mutasi_barang(prefix_key=""):
                 st.session_state[f"step_mutasi_{prefix_key}"] = 2
                 st.rerun()
 
-    # --- LANGKAH 2: RAK ASAL ---
     if current_step >= 2:
         with st.form(f"form_mutasi_asal_{prefix_key}"):
             st.info(f"📌 SKU Dipindah: **`{st.session_state[f'val_mutasi_sku_{prefix_key}']}`**")
@@ -420,7 +437,6 @@ def ui_mutasi_barang(prefix_key=""):
                 st.session_state[f"step_mutasi_{prefix_key}"] = 3
                 st.rerun()
 
-    # --- LANGKAH 3: RAK TUJUAN & KONFIRMASI ---
     if current_step >= 3:
         with st.form(f"form_mutasi_tujuan_{prefix_key}"):
             st.info(f"📌 SKU: **`{st.session_state[f'val_mutasi_sku_{prefix_key}']}`** | Dari Rak: **{st.session_state[f'val_mutasi_asal_{prefix_key}']}**")
@@ -464,6 +480,8 @@ def ui_mutasi_barang(prefix_key=""):
                         st.rerun()
                     else:
                         st.error(f"❌ SKU '{sku_val}' tidak ditemukan di rak '{asal_val}'.")
+                        
+    auto_focus_script()
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
