@@ -199,27 +199,28 @@ def ui_input_barang():
             else:
                 edit_stok = int(edit_stok_raw)
                 rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-                found = False
-                for item in rak_items:
-                    if item["sku"].lower() == edit_sku.lower():
-                        item["stok"] = edit_stok
-                        found = True
-                        break
-                if not found:
-                    rak_items.append({"sku": edit_sku, "stok": edit_stok})
+                
+                # DIUBAH DISINI: Langsung ditambahkan sebagai baris baru (mendukung duplikat SKU di rak yang sama)
+                rak_items.append({"sku": edit_sku, "stok": edit_stok})
+                
                 save_data_to_sheets()
-                st.success(f"Disimpan di '{edit_rak}'.")
+                st.success(f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'.")
                 st.rerun()
 
         if btn_hapus and edit_sku:
             if edit_rak in st.session_state.rak_gudang_tanpa_posisi:
-                st.session_state.rak_gudang_tanpa_posisi[edit_rak] = [
-                    item for item in st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-                    if item["sku"].lower() != edit_sku.lower()
-                ]
-                save_data_to_sheets()
-                st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
-                st.rerun()
+                # Menghapus SKU yang cocok di rak tersebut (jika ada kembar, menghapus salah satu atau semua yang cocok)
+                rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
+                filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
+                
+                if len(filtered_rak) < len(rak_lama):
+                    st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
+                    save_data_to_sheets()
+                    st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
+                    st.rerun()
+                else:
+                    st.session_state.error_input_pesan = f"❌ SKU '{edit_sku}' tidak ditemukan di rak '{edit_rak}'."
+                    st.rerun()
             else:
                 st.session_state.error_input_pesan = f"❌ Rak '{edit_rak}' tidak ditemukan."
                 st.rerun()
