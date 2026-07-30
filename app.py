@@ -580,18 +580,5 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
     # Tunggu 2 detik agar notifikasi bisa dibaca, lalu bersihkan layar!
     time.sleep(2)
     
-    # PEMBERSIH KOLOM INPUT BERDASARKAN TAB YANG AKTIF
-    if tab_aktif == "input":
-        if "input_sku_field" in st.session_state: st.session_state.input_sku_field = ""
-        if "input_stok_field" in st.session_state: st.session_state.input_stok_field = ""
-        if "input_rak_field" in st.session_state: st.session_state.input_rak_field = ""
-    elif tab_aktif == "ambil":
-        if "ambil_rak_field" in st.session_state: st.session_state.ambil_rak_field = ""
-    elif tab_aktif == "mutasi":
-        if "mutasi_asal_input" in st.session_state: st.session_state.mutasi_asal_input = ""
-        if "mutasi_sku_input" in st.session_state: st.session_state.mutasi_sku_input = ""
-        if "mutasi_tujuan_input" in st.session_state: st.session_state.mutasi_tujuan_input = ""
-        if "mutasi_dropdown_kembar" in st.session_state: del st.session_state["mutasi_dropdown_kembar"]
-
     st.session_state.global_notif = None
     st.rerun()
