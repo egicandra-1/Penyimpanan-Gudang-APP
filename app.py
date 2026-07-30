@@ -168,12 +168,18 @@ def ui_pencarian_visual():
                     with cols[idx % 4]:
                         st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
 
-def ui_input_barang():
+def ui_input_barang(prefix_key=""):
     st.markdown("### 📝 Input / Update ke Rak")
-    with st.form("form_edit_slot", clear_on_submit=False):
-        edit_sku = st.text_input("Masukkan Kode SKU:").strip()
-        edit_stok_raw = st.text_input("Jumlah Stok:").strip()
-        edit_rak = st.text_input("Ketik Nama Rak Tujuan:").strip()
+    
+    # Inisialisasi state penyimpanan input form agar bisa dikosongkan secara dinamis
+    for k in [f"in_sku_{prefix_key}", f"in_stok_{prefix_key}", f"in_rak_{prefix_key}"]:
+        if k not in st.session_state:
+            st.session_state[k] = ""
+
+    with st.form(f"form_edit_slot_{prefix_key}"):
+        edit_sku = st.text_input("Masukkan Kode SKU:", value=st.session_state[f"in_sku_{prefix_key}"]).strip()
+        edit_stok_raw = st.text_input("Jumlah Stok:", value=st.session_state[f"in_stok_{prefix_key}"]).strip()
+        edit_rak = st.text_input("Ketik Nama Rak Tujuan:", value=st.session_state[f"in_rak_{prefix_key}"]).strip()
 
         c_b1, c_b2 = st.columns(2)
         with c_b1:
@@ -182,11 +188,18 @@ def ui_input_barang():
             btn_hapus = st.form_submit_button("Hapus SKU")
 
         if btn_simpan and edit_sku:
+            st.session_state[f"in_sku_{prefix_key}"] = edit_sku
+            st.session_state[f"in_stok_{prefix_key}"] = edit_stok_raw
+            st.session_state[f"in_rak_{prefix_key}"] = edit_rak
+
             if not edit_stok_raw.isdigit():
                 st.error("❌ Stok harus angka!")
             elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
                 st.error(f"❌ Rak '{edit_rak}' tidak terdaftar.")
-                # Menggunakan st.rerun() untuk mereset kolom kembali kosong
+                # Kosongkan state agar saat halaman dimuat ulang, kolom bersih
+                st.session_state[f"in_sku_{prefix_key}"] = ""
+                st.session_state[f"in_stok_{prefix_key}"] = ""
+                st.session_state[f"in_rak_{prefix_key}"] = ""
                 st.rerun()
             else:
                 edit_stok = int(edit_stok_raw)
@@ -200,6 +213,11 @@ def ui_input_barang():
                 if not found:
                     rak_items.append({"sku": edit_sku, "stok": edit_stok})
                 save_data_to_sheets()
+                
+                # Kosongkan state setelah sukses
+                st.session_state[f"in_sku_{prefix_key}"] = ""
+                st.session_state[f"in_stok_{prefix_key}"] = ""
+                st.session_state[f"in_rak_{prefix_key}"] = ""
                 st.success(f"Disimpan di '{edit_rak}'.")
                 st.rerun()
 
@@ -210,6 +228,9 @@ def ui_input_barang():
                     if item["sku"].lower() != edit_sku.lower()
                 ]
                 save_data_to_sheets()
+                st.session_state[f"in_sku_{prefix_key}"] = ""
+                st.session_state[f"in_stok_{prefix_key}"] = ""
+                st.session_state[f"in_rak_{prefix_key}"] = ""
                 st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
                 st.rerun()
             else:
@@ -325,7 +346,7 @@ else:
         with col_tengah:
             ui_pencarian_visual()
         with col_kanan:
-            ui_input_barang()
+            ui_input_barang(prefix_key="pc")
             st.markdown("---")
             ui_ambil_barang()
             st.markdown("---")
@@ -338,7 +359,7 @@ else:
         with tab2:
             ui_pencarian_visual()
         with tab3:
-            ui_input_barang()
+            ui_input_barang(prefix_key="hp")
         with tab4:
             ui_ambil_barang()
         with tab5:
