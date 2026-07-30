@@ -226,60 +226,65 @@ def ui_input_barang():
             st.rerun()
 
 def ui_ambil_barang():
-    st.markdown("### 📤 Ambil Barang (Scan Berulang = Tambah Jumlah)")
+    st.markdown("### 📤 Pengurangan Stok (Scan Berulang)")
 
     if "error_ambil_pesan" not in st.session_state:
         st.session_state.error_ambil_pesan = ""
-    if "last_scanned_sku" not in st.session_state:
-        st.session_state.last_scanned_sku = ""
-    if "auto_count" not in st.session_state:
-        st.session_state.auto_count = 1
+    if "scan_ambil_sku" not in st.session_state:
+        st.session_state.scan_ambil_sku = ""
+    if "jumlah_scan" not in st.session_state:
+        st.session_state.jumlah_scan = 1
 
     if st.session_state.error_ambil_pesan:
         st.error(st.session_state.error_ambil_pesan)
         st.session_state.error_ambil_pesan = ""
 
-    # Callback untuk mendeteksi saat scanner memasukkan SKU baru atau scan ulang
-    def on_sku_change():
-        current_sku = st.session_state.ambil_sku_field.strip()
-        if current_sku:
-            if current_sku == st.session_state.last_scanned_sku:
-                st.session_state.auto_count += 1
+    # Fungsi callback saat discan berulang kali di kotak yang sama
+    def update_scan_count():
+        scanned = st.session_state.ambil_scan_field.strip()
+        if scanned:
+            if scanned == st.session_state.scan_ambil_sku:
+                st.session_state.jumlah_scan += 1
             else:
-                st.session_state.last_scanned_sku = current_sku
-                st.session_state.auto_count = 1
+                st.session_state.scan_ambil_sku = scanned
+                st.session_state.jumlah_scan = 1
 
-    # Kotak SKU (Kursor utama di sini)
-    ambil_sku = st.text_input("Scan / Ketik Kode SKU yang Diambil:", key="ambil_sku_field", on_change=on_sku_change).strip()
+    # Kotak utama tempat alat scanner menembak barcode
+    sku_input = st.text_input("Scan Kode SKU:", key="ambil_scan_field", on_change=update_scan_count).strip()
     
-    # Kotak Jumlah (Akan bertambah otomatis jika SKU yang sama di-scan berulang)
-    ambil_jumlah_raw = st.text_input("Jumlah yang Diambil (Bertambah otomatis saat scan ulang):", value=str(st.session_state.auto_count), key="ambil_jumlah_field").strip()
-    
+    # Menampilkan informasi SKU terakhir dan jumlah yang terakumulasi otomatis
+    if st.session_state.scan_ambil_sku:
+        st.info(f"📦 SKU Terpilih: **{st.session_state.scan_ambil_sku}**\n\n🔢 Jumlah Pengurangan Stok: **{st.session_state.jumlah_scan}**")
+
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
-    btn_proses_ambil = st.button("Proses Ambil Barang", use_container_width=True)
+    c_a1, c_a2 = st.columns(2)
+    with c_a1:
+        btn_konfirmasi = st.button("Konfirmasi Pengurangan Stok", use_container_width=True, type="primary")
+    with c_a2:
+        if st.button("Reset Hitungan", use_container_width=True):
+            st.session_state.scan_ambil_sku = ""
+            st.session_state.jumlah_scan = 1
+            st.rerun()
 
-    if btn_proses_ambil:
-        if not ambil_sku:
-            st.session_state.error_ambil_pesan = "❌ Kode SKU harus diisi!"
+    if btn_konfirmasi:
+        target_sku = st.session_state.scan_ambil_sku if st.session_state.scan_ambil_sku else sku_input
+        
+        if not target_sku:
+            st.session_state.error_ambil_pesan = "❌ Belum ada SKU yang di-scan!"
+            st.rerun()
+        elif not ambil_rak:
+            st.session_state.error_ambil_pesan = "❌ Nama Rak Asal harus diisi!"
             st.rerun()
         elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.error_ambil_pesan = f"❌ Rak '{ambil_rak}' tidak terdaftar."
             st.rerun()
         else:
-            # Ambil nilai dari kotak jumlah (mendukung ketik manual atau hasil hitung scan)
-            if not ambil_jumlah_raw:
-                jumlah_ambil = 1
-            elif ambil_jumlah_raw.isdigit():
-                jumlah_ambil = int(ambil_jumlah_raw)
-            else:
-                st.session_state.error_ambil_pesan = "❌ Jumlah ambil harus berupa angka!"
-                st.rerun()
-
+            jumlah_ambil = st.session_state.jumlah_scan
             rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
             item_ditemukan = None
             for item in rak_items:
-                if item["sku"].lower() == ambil_sku.lower():
+                if item["sku"].lower() == target_sku.lower():
                     item_ditemukan = item
                     break
 
@@ -288,17 +293,19 @@ def ui_ambil_barang():
                 if jumlah_ambil >= stok_sekarang:
                     rak_items.remove(item_ditemukan)
                     save_data_to_sheets()
-                    st.warning(f"⚠️ Stok habis! SKU '{ambil_sku}' dihapus dari rak.")
-                    st.session_state.auto_count = 1  # Reset hitungan
+                    st.warning(f"⚠️ Stok habis! SKU '{target_sku}' dihapus dari rak.")
+                    st.session_state.scan_ambil_sku = ""
+                    st.session_state.jumlah_scan = 1
                     st.rerun()
                 else:
                     item_ditemukan["stok"] -= jumlah_ambil
                     save_data_to_sheets()
-                    st.success(f"Berhasil ambil {jumlah_ambil} pcs dari SKU '{ambil_sku}'. Sisa stok: {item_ditemukan['stok']}")
-                    st.session_state.auto_count = 1  # Reset hitungan setelah sukses
+                    st.success(f"Berhasil mengurangi {jumlah_ambil} pcs dari SKU '{target_sku}'. Sisa stok: {item_ditemukan['stok']}")
+                    st.session_state.scan_ambil_sku = ""
+                    st.session_state.jumlah_scan = 1
                     st.rerun()
             else:
-                st.session_state.error_ambil_pesan = f"❌ SKU '{ambil_sku}' tidak ditemukan di rak '{ambil_rak}'."
+                st.session_state.error_ambil_pesan = f"❌ SKU '{target_sku}' tidak ditemukan di rak '{ambil_rak}'."
                 st.rerun()
 
 def ui_mutasi_barang():
