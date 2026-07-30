@@ -223,10 +223,6 @@ def ui_input_barang():
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{edit_rak}' tidak terdaftar."}
             st.rerun()
         else:
-            # KOSONGKAN KOLOM SECARA INSTAN DI AWAL SEBELUM PROSES GOOGLE SHEETS
-            st.session_state.input_sku_field = ""
-            st.session_state.input_stok_field = ""
-            
             edit_stok = int(edit_stok_raw)
             rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
             rak_items.append({"sku": edit_sku, "stok": edit_stok})
@@ -239,10 +235,6 @@ def ui_input_barang():
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
             st.rerun()
         elif edit_rak in st.session_state.rak_gudang_tanpa_posisi:
-            # KOSONGKAN KOLOM SECARA INSTAN
-            st.session_state.input_sku_field = ""
-            st.session_state.input_stok_field = ""
-            
             rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
             filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
             if len(filtered_rak) < len(rak_lama):
