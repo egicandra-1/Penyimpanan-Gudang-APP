@@ -178,7 +178,6 @@ def ui_input_barang():
         st.error(st.session_state.error_input_pesan)
         st.session_state.error_input_pesan = ""
 
-    # Menggunakan text_input biasa tanpa st.form agar aman dari auto-submit saat Enter di-scan
     edit_sku = st.text_input("Masukkan Kode SKU:", key="input_sku_field").strip()
     edit_stok_raw = st.text_input("Jumlah Stok:", key="input_stok_field").strip()
     edit_rak = st.text_input("Ketik Nama Rak Tujuan:", key="input_rak_field").strip()
@@ -202,9 +201,7 @@ def ui_input_barang():
         else:
             edit_stok = int(edit_stok_raw)
             rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-            
             rak_items.append({"sku": edit_sku, "stok": edit_stok})
-            
             save_data_to_sheets()
             st.success(f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'.")
             st.rerun()
@@ -216,7 +213,6 @@ def ui_input_barang():
         elif edit_rak in st.session_state.rak_gudang_tanpa_posisi:
             rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
             filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
-            
             if len(filtered_rak) < len(rak_lama):
                 st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
                 save_data_to_sheets()
@@ -231,38 +227,60 @@ def ui_input_barang():
 
 def ui_ambil_barang():
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
-    with st.form("form_ambil_barang"):
-        ambil_sku = st.text_input("Ketik Kode SKU yang Diambil:").strip()
-        ambil_jumlah_raw = st.text_input("Jumlah yang Diambil:").strip()
-        ambil_rak = st.text_input("Ketik Nama Rak Asal:").strip()
+    
+    if "error_ambil_pesan" not in st.session_state:
+        st.session_state.error_ambil_pesan = ""
 
-        if st.form_submit_button("Proses Ambil Barang") and ambil_sku:
-            if not ambil_jumlah_raw.isdigit():
-                st.error("❌ Jumlah ambil harus angka!")
-            elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.error(f"❌ Rak '{ambil_rak}' tidak ditemukan.")
-            else:
+    if st.session_state.error_ambil_pesan:
+        st.error(st.session_state.error_ambil_pesan)
+        st.session_state.error_ambil_pesan = ""
+
+    # Tanpa st.form agar aman dari auto-submit saat di-scan
+    ambil_sku = st.text_input("Ketik Kode SKU yang Diambil:", key="ambil_sku_field").strip()
+    ambil_jumlah_raw = st.text_input("Jumlah yang Diambil (Kosongkan = Ambil 1 pcs):", key="ambil_jumlah_field").strip()
+    ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
+
+    btn_proses_ambil = st.button("Proses Ambil Barang", use_container_width=True)
+
+    if btn_proses_ambil:
+        if not ambil_sku:
+            st.session_state.error_ambil_pesan = "❌ Kode SKU harus diisi!"
+            st.rerun()
+        elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.error_ambil_pesan = f"❌ Rak '{ambil_rak}' tidak terdaftar."
+            st.rerun()
+        else:
+            # Jika kolom jumlah dikosongkan, otomatis diatur bernilai 1
+            if not ambil_jumlah_raw:
+                jumlah_ambil = 1
+            elif ambil_jumlah_raw.isdigit():
                 jumlah_ambil = int(ambil_jumlah_raw)
-                rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
-                item_ditemukan = None
-                for item in rak_items:
-                    if item["sku"].lower() == ambil_sku.lower():
-                        item_ditemukan = item
-                        break
-                if item_ditemukan:
-                    stok_sekarang = item_ditemukan["stok"]
-                    if jumlah_ambil >= stok_sekarang:
-                        rak_items.remove(item_ditemukan)
-                        save_data_to_sheets()
-                        st.warning(f"⚠️ Stok habis! '{ambil_sku}' dihapus.")
-                        st.rerun()
-                    else:
-                        item_ditemukan["stok"] -= jumlah_ambil
-                        save_data_to_sheets()
-                        st.success(f"Berhasil ambil {jumlah_ambil} pcs.")
-                        st.rerun()
+            else:
+                st.session_state.error_ambil_pesan = "❌ Jumlah ambil harus berupa angka!"
+                st.rerun()
+
+            rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
+            item_ditemukan = None
+            for item in rak_items:
+                if item["sku"].lower() == ambil_sku.lower():
+                    item_ditemukan = item
+                    break
+
+            if item_ditemukan:
+                stok_sekarang = item_ditemukan["stok"]
+                if jumlah_ambil >= stok_sekarang:
+                    rak_items.remove(item_ditemukan)
+                    save_data_to_sheets()
+                    st.warning(f"⚠️ Stok habis! SKU '{ambil_sku}' dihapus dari rak.")
+                    st.rerun()
                 else:
-                    st.error("❌ SKU tidak ditemukan.")
+                    item_ditemukan["stok"] -= jumlah_ambil
+                    save_data_to_sheets()
+                    st.success(f"Berhasil ambil {jumlah_ambil} pcs dari SKU '{ambil_sku}'. Sisa stok: {item_ditemukan['stok']}")
+                    st.rerun()
+            else:
+                st.session_state.error_ambil_pesan = f"❌ SKU '{ambil_sku}' tidak ditemukan di rak '{ambil_rak}'."
+                st.rerun()
 
 def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
