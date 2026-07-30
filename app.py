@@ -233,11 +233,18 @@ def ui_ambil_barang():
 
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} 
+        
+    # KUNCI SOLUSI: Counter untuk membuat ID kotak input selalu baru setiap kali discan
+    if "scan_counter" not in st.session_state:
+        st.session_state.scan_counter = 0
 
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        raw_val = st.session_state.quick_scan_input.strip()
+        # Mengambil nilai dari kotak input yang terhubung dengan counter saat ini
+        current_key = f"quick_scan_input_{st.session_state.scan_counter}"
+        raw_val = st.session_state[current_key].strip()
+        
         if not raw_val:
             return
 
@@ -245,12 +252,12 @@ def ui_ambil_barang():
         
         if not rak_terpilih:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
-            st.session_state.quick_scan_input = ""
+            st.session_state.scan_counter += 1 # Paksa buat kotak baru
             return
             
         if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
-            st.session_state.quick_scan_input = ""
+            st.session_state.scan_counter += 1
             return
 
         sku_terdeteksi = None
@@ -264,9 +271,10 @@ def ui_ambil_barang():
         if not sku_terdeteksi:
             sku_salah = raw_val.split()[0] if " " in raw_val else raw_val[:10]
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{sku_salah}' tidak ada di rak '{rak_terpilih}'!"}
-            st.session_state.quick_scan_input = ""
+            st.session_state.scan_counter += 1
             return
 
+        # Tetap menghitung jumlah tumpukan (untuk berjaga-jaga jika 2 tembakan scanner tertangkap di 1 frame)
         jumlah_scan = 1
         if sku_terdeteksi.lower() in raw_val.lower():
             hitung_kemunculan = raw_val.lower().count(sku_terdeteksi.lower())
@@ -279,11 +287,14 @@ def ui_ambil_barang():
             st.session_state.scan_cart[sku_terdeteksi] = jumlah_scan
             
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
-        st.session_state.quick_scan_input = ""
+        
+        # MENGHANCURKAN KOTAK LAMA: Menambah counter akan membuat key kotak input berubah total
+        st.session_state.scan_counter += 1
 
+    # Kotak input memanggil ID dengan scan_counter (selalu bersih!)
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
-        key="quick_scan_input", 
+        key=f"quick_scan_input_{st.session_state.scan_counter}", 
         on_change=process_scanned_sku,
         placeholder="Arahkan scanner ke barcode..."
     )
@@ -418,26 +429,22 @@ def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     placeholders["mutasi"] = st.empty() 
     
-    # Lepaskan dari form kaku agar UI bisa bereaksi otomatis saat Anda mengetik nama rak & sku
     mutasi_asal = st.text_input("Nama Rak Asal:", key="mutasi_asal_input").strip()
     mutasi_sku = st.text_input("Kode SKU yang Dipindah:", key="mutasi_sku_input").strip()
     
     item_terpilih = None
     
-    # Logika Cerdas: Cek ke dalam rak secara real-time
     if mutasi_asal and mutasi_sku:
         if mutasi_asal in st.session_state.rak_gudang_tanpa_posisi:
             items_di_rak = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
             matching_items = [item for item in items_di_rak if item["sku"].lower() == mutasi_sku.lower()]
             
-            # Jika ditemukan SKU Kembar, munculkan Dropdown interaktif!
             if len(matching_items) > 1:
                 opsi_stok = [f"Stok Asal: {item['stok']}" for item in matching_items]
                 pilihan = st.selectbox("⚠️ Ditemukan SKU Kembar! Pilih kelompok mana yang mau dipindah:", opsi_stok, key="mutasi_dropdown_kembar")
                 target_stok = int(pilihan.replace("Stok Asal: ", ""))
                 item_terpilih = next((item for item in matching_items if item["stok"] == target_stok), None)
                 
-            # Jika hanya 1 SKU normal, langsung kunci pilihan otomatis
             elif len(matching_items) == 1:
                 item_terpilih = matching_items[0]
                 st.info(f"✅ SKU ditemukan! (Satu tumpukan dengan stok: {item_terpilih['stok']}) siap dipindah.")
@@ -460,7 +467,6 @@ def ui_mutasi_barang():
             st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak tujuan tidak boleh sama dengan rak asal."}
             st.rerun()
         elif item_terpilih:
-            # Pindahkan seluruh stok kartu tersebut ke rak baru
             rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
             stok_yang_ikut = item_terpilih["stok"]
             sku_asli = item_terpilih["sku"]
