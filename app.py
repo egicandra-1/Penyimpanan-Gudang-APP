@@ -251,20 +251,37 @@ def ui_ambil_barang():
             return
 
         rak_terpilih = st.session_state.ambil_rak_field.strip()
+        
+        # Validasi 1: Pastikan Rak Asal sudah diisi dan terdaftar
+        if not rak_terpilih:
+            st.session_state.error_ambil_pesan = "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"
+            st.session_state.quick_scan_input = ""
+            return
+            
+        if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.error_ambil_pesan = f"❌ Rak '{rak_terpilih}' tidak ditemukan!"
+            st.session_state.quick_scan_input = ""
+            return
+
+        # Validasi 2: Cari SKU HANYA di dalam Rak Asal tersebut
         sku_terdeteksi = None
+        daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
-        # Cocokan dengan SKU yang terdaftar di Rak Asal
-        if rak_terpilih and rak_terpilih in st.session_state.rak_gudang_tanpa_posisi:
-            daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
-            for real_sku in daftar_sku_rak:
-                if real_sku.lower() in raw_val.lower():
-                    sku_terdeteksi = real_sku
-                    break
+        for real_sku in daftar_sku_rak:
+            if real_sku.lower() in raw_val.lower():
+                sku_terdeteksi = real_sku
+                break
         
+        # JIKA SKU TIDAK ADA DI RAK ASAL, TOLAK DAN MUNCULKAN ERROR
         if not sku_terdeteksi:
-            sku_terdeteksi = raw_val.split()[0] if " " in raw_val else raw_val
-            if len(sku_terdeteksi) > 15:
-                sku_terdeteksi = sku_terdeteksi[:5]
+            # Mengambil potongan teks yang di-scan untuk ditampilkan di pesan error
+            sku_salah = raw_val.split()[0] if " " in raw_val else raw_val[:10]
+            st.session_state.error_ambil_pesan = f"❌ DITOLAK! SKU '{sku_salah}' tidak ada di rak '{rak_terpilih}'!"
+            st.session_state.quick_scan_input = ""
+            return
+
+        # Jika lolos validasi, bersihkan pesan error
+        st.session_state.error_ambil_pesan = ""
 
         # Hitung kemunculan (jika ter-scan ganda cepat)
         jumlah_scan = 1
