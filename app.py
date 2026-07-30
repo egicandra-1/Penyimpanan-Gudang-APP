@@ -93,6 +93,7 @@ def save_data_to_sheets():
 if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
 
+# Simpan status pilihan layar pengguna di memori
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
@@ -168,18 +169,12 @@ def ui_pencarian_visual():
                     with cols[idx % 4]:
                         st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
 
-def ui_input_barang(prefix_key=""):
+def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
-    
-    # Inisialisasi state penyimpanan input form agar bisa dikosongkan secara dinamis
-    for k in [f"in_sku_{prefix_key}", f"in_stok_{prefix_key}", f"in_rak_{prefix_key}"]:
-        if k not in st.session_state:
-            st.session_state[k] = ""
-
-    with st.form(f"form_edit_slot_{prefix_key}"):
-        edit_sku = st.text_input("Masukkan Kode SKU:", value=st.session_state[f"in_sku_{prefix_key}"]).strip()
-        edit_stok_raw = st.text_input("Jumlah Stok:", value=st.session_state[f"in_stok_{prefix_key}"]).strip()
-        edit_rak = st.text_input("Ketik Nama Rak Tujuan:", value=st.session_state[f"in_rak_{prefix_key}"]).strip()
+    with st.form("form_edit_slot"):
+        edit_sku = st.text_input("Masukkan Kode SKU:").strip()
+        edit_stok_raw = st.text_input("Jumlah Stok:").strip()
+        edit_rak = st.text_input("Ketik Nama Rak Tujuan:").strip()
 
         c_b1, c_b2 = st.columns(2)
         with c_b1:
@@ -188,19 +183,10 @@ def ui_input_barang(prefix_key=""):
             btn_hapus = st.form_submit_button("Hapus SKU")
 
         if btn_simpan and edit_sku:
-            st.session_state[f"in_sku_{prefix_key}"] = edit_sku
-            st.session_state[f"in_stok_{prefix_key}"] = edit_stok_raw
-            st.session_state[f"in_rak_{prefix_key}"] = edit_rak
-
             if not edit_stok_raw.isdigit():
                 st.error("❌ Stok harus angka!")
             elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
                 st.error(f"❌ Rak '{edit_rak}' tidak terdaftar.")
-                # Kosongkan state agar saat halaman dimuat ulang, kolom bersih
-                st.session_state[f"in_sku_{prefix_key}"] = ""
-                st.session_state[f"in_stok_{prefix_key}"] = ""
-                st.session_state[f"in_rak_{prefix_key}"] = ""
-                st.rerun()
             else:
                 edit_stok = int(edit_stok_raw)
                 rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
@@ -213,11 +199,6 @@ def ui_input_barang(prefix_key=""):
                 if not found:
                     rak_items.append({"sku": edit_sku, "stok": edit_stok})
                 save_data_to_sheets()
-                
-                # Kosongkan state setelah sukses
-                st.session_state[f"in_sku_{prefix_key}"] = ""
-                st.session_state[f"in_stok_{prefix_key}"] = ""
-                st.session_state[f"in_rak_{prefix_key}"] = ""
                 st.success(f"Disimpan di '{edit_rak}'.")
                 st.rerun()
 
@@ -228,14 +209,10 @@ def ui_input_barang(prefix_key=""):
                     if item["sku"].lower() != edit_sku.lower()
                 ]
                 save_data_to_sheets()
-                st.session_state[f"in_sku_{prefix_key}"] = ""
-                st.session_state[f"in_stok_{prefix_key}"] = ""
-                st.session_state[f"in_rak_{prefix_key}"] = ""
                 st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
                 st.rerun()
             else:
                 st.error(f"❌ Rak '{edit_rak}' tidak ditemukan.")
-                st.rerun()
 
 def ui_ambil_barang():
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
@@ -247,10 +224,8 @@ def ui_ambil_barang():
         if st.form_submit_button("Proses Ambil Barang") and ambil_sku:
             if not ambil_jumlah_raw.isdigit():
                 st.error("❌ Jumlah ambil harus angka!")
-                st.rerun()
             elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
                 st.error(f"❌ Rak '{ambil_rak}' tidak ditemukan.")
-                st.rerun()
             else:
                 jumlah_ambil = int(ambil_jumlah_raw)
                 rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
@@ -273,7 +248,6 @@ def ui_ambil_barang():
                         st.rerun()
                 else:
                     st.error(f"❌ SKU tidak ditemukan.")
-                    st.rerun()
 
 def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
@@ -285,10 +259,8 @@ def ui_mutasi_barang():
         if st.form_submit_button("Pindah Rak"):
             if mutasi_asal not in st.session_state.rak_gudang_tanpa_posisi or tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
                 st.error("❌ Rak Asal / Tujuan tidak valid.")
-                st.rerun()
             elif mutasi_asal == tujuan_rak:
                 st.error("❌ Rak tujuan tidak boleh sama.")
-                st.rerun()
             else:
                 rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
                 item_ditemukan = next((item for item in rak_asal_items if item["sku"] == mutasi_sku), None)
@@ -301,12 +273,14 @@ def ui_mutasi_barang():
                     st.rerun()
                 else:
                     st.error(f"❌ SKU tidak ditemukan di '{mutasi_asal}'.")
-                    st.rerun()
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
 
 if st.session_state.mode_aplikasi is None:
+    # ---------------------------------------------------------
+    # HALAMAN AWAL (LANDING PAGE)
+    # ---------------------------------------------------------
     st.markdown("<br><br><h1 style='text-align: center;'>📦 Selamat Datang di Sistem Gudang</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
@@ -326,6 +300,9 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
+    # ---------------------------------------------------------
+    # HALAMAN DASHBOARD UTAMA (SETELAH MASUK)
+    # ---------------------------------------------------------
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
@@ -339,6 +316,7 @@ else:
             
     st.divider()
 
+    # Logika Tampilan (Komputer vs HP)
     if st.session_state.mode_aplikasi == "komputer":
         col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
         with col_kiri:
@@ -346,12 +324,14 @@ else:
         with col_tengah:
             ui_pencarian_visual()
         with col_kanan:
-            ui_input_barang(prefix_key="pc")
+            # Di komputer, form tetap digabung memanjang ke bawah
+            ui_input_barang()
             st.markdown("---")
             ui_ambil_barang()
             st.markdown("---")
             ui_mutasi_barang()
     else:
+        # Di HP, form dipecah menjadi 5 tab yang rapi dan ringkas
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "📤 Ambil", "🔄 Mutasi"])
         
         with tab1:
@@ -359,7 +339,7 @@ else:
         with tab2:
             ui_pencarian_visual()
         with tab3:
-            ui_input_barang(prefix_key="hp")
+            ui_input_barang()
         with tab4:
             ui_ambil_barang()
         with tab5:
