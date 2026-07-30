@@ -2,6 +2,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
 import json
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Slotting Rak Sederhana", layout="wide")
 
@@ -95,6 +96,25 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
+
+
+# --- FUNGSI JAVASCRIPT AGAR KURSOR OTOMATIS FOKUS TANPA KLIK ---
+def auto_focus_input_trick():
+    js_code = """
+    <script>
+    setTimeout(function() {
+        const doc = window.parent.document;
+        const inputs = doc.querySelectorAll('input[type="text"]');
+        if (inputs.length > 0) {
+            // Ambil kotak input aktif terakhir di layar
+            const targetInput = inputs[inputs.length - 1];
+            targetInput.focus();
+            targetInput.click();
+        }
+    }, 100);
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
 
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
@@ -272,6 +292,8 @@ def ui_input_barang(prefix_key=""):
                 else:
                     st.error(f"❌ Rak '{h_rak}' tidak ditemukan.")
 
+    auto_focus_input_trick()
+
 def ui_ambil_barang(prefix_key=""):
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
     
@@ -375,6 +397,8 @@ def ui_ambil_barang(prefix_key=""):
                     else:
                         st.error(f"❌ SKU '{sku_val}' tidak ditemukan di rak '{rak_input}'.")
 
+    auto_focus_input_trick()
+
 def ui_mutasi_barang(prefix_key=""):
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     
@@ -461,6 +485,8 @@ def ui_mutasi_barang(prefix_key=""):
                         st.rerun()
                     else:
                         st.error(f"❌ SKU '{sku_val}' tidak ditemukan di rak '{asal_val}'.")
+
+    auto_focus_input_trick()
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
