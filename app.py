@@ -2,6 +2,7 @@ import time
 from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 
 st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
@@ -161,7 +162,6 @@ def ui_pencarian_visual():
         else:
             st.error(f"❌ Tidak ada SKU '{search_query}' di rak manapun.")
             
-        # Tombol ini memungkinkan Anda mengosongkan kotak pencarian dengan cepat
         if st.button("🧹 Bersihkan Hasil Pencarian"):
             st.session_state.main_search_input = ""
             st.rerun()
@@ -238,16 +238,11 @@ def ui_ambil_barang():
 
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} 
-        
-    if "scan_counter" not in st.session_state:
-        st.session_state.scan_counter = 0
 
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        current_key = f"quick_scan_input_{st.session_state.scan_counter}"
-        raw_val = st.session_state[current_key].strip()
-        
+        raw_val = st.session_state.quick_scan_input.strip()
         if not raw_val:
             return
 
@@ -255,17 +250,18 @@ def ui_ambil_barang():
         
         if not rak_terpilih:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
-            st.session_state.scan_counter += 1
+            st.session_state.quick_scan_input = ""
             return
             
         if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
-            st.session_state.scan_counter += 1
+            st.session_state.quick_scan_input = ""
             return
 
         sku_terdeteksi = None
         daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
+        # Baca dari belakang jika ada tumpukan kilat teks MJ423MJ423
         for real_sku in daftar_sku_rak:
             if raw_val.lower().endswith(real_sku.lower()):
                 sku_terdeteksi = real_sku
@@ -278,11 +274,11 @@ def ui_ambil_barang():
                     break
         
         if not sku_terdeteksi:
-            sku_salah = raw_val.split()[-1] if " " in raw_val else raw_val[-10:]
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{sku_salah}' tidak ada di rak '{rak_terpilih}'!"}
-            st.session_state.scan_counter += 1
+            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU tidak dikenali di rak '{rak_terpilih}'!"}
+            st.session_state.quick_scan_input = ""
             return
 
+        # PENCEGAH BOLA SALJU (SNOWBALL): Setiap kali enter dari scanner, hitung selalu sebagai +1
         jumlah_scan = 1
 
         if sku_terdeteksi in st.session_state.scan_cart:
@@ -292,13 +288,37 @@ def ui_ambil_barang():
             
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
         
-        st.session_state.scan_counter += 1
+        # Bersihkan kotak agar rapi
+        st.session_state.quick_scan_input = ""
 
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
-        key=f"quick_scan_input_{st.session_state.scan_counter}", 
+        key="quick_scan_input", 
         on_change=process_scanned_sku,
         placeholder="Arahkan scanner ke barcode..."
+    )
+
+    # SUNTIKAN JAVASCRIPT KURSOR MAGNET: Mengunci kursor di kotak scan agar tidak lepas!
+    components.html(
+        """
+        <script>
+        const doc = window.parent.document;
+        function setFocus() {
+            const inputs = doc.querySelectorAll('input');
+            for (let i = 0; i < inputs.length; i++) {
+                if (inputs[i].placeholder === 'Arahkan scanner ke barcode...') {
+                    inputs[i].focus();
+                    break;
+                }
+            }
+        }
+        setFocus();
+        setTimeout(setFocus, 100);
+        setTimeout(setFocus, 500);
+        </script>
+        """,
+        height=0,
+        width=0,
     )
 
     if st.session_state.scan_cart:
@@ -456,7 +476,6 @@ def ui_mutasi_barang():
         else:
             st.error(f"❌ Rak Asal '{mutasi_asal}' tidak valid atau belum dibuat.")
 
-    # Tambahan ID (Key) agar bisa di-reset otomatis nanti
     tujuan_rak = st.text_input("Nama Rak Tujuan:", key="mutasi_tujuan_input").strip()
 
     if st.button("🔄 Pindah Rak", use_container_width=True, type="primary"):
@@ -564,7 +583,7 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
     # Tunggu 2 detik agar Anda bisa membaca pesan tersebut
     time.sleep(2)
     
-    # --- MENGOSONGKAN SEMUA KOLOM INPUT SECARA OTOMATIS SESUAI TAB YANG AKTIF ---
+    # MENGOSONGKAN SEMUA KOLOM INPUT SECARA OTOMATIS SESUAI TAB YANG AKTIF
     if tab_aktif == "rak":
         if "edit_rak_name_input" in st.session_state: 
             st.session_state.edit_rak_name_input = ""
