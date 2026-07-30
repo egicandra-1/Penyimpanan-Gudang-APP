@@ -250,16 +250,18 @@ def ui_ambil_barang():
         if raw_val:
             sku_terdeteksi = None
             
+            # Cocokan dengan SKU yang ada di rak
             if ambil_rak and ambil_rak in st.session_state.rak_gudang_tanpa_posisi:
                 daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[ambil_rak]]
                 for real_sku in daftar_sku_rak:
-                    if real_sku.lower() in raw_val.lower():
+                    if real_sku.lower() in raw_val.lower() or raw_val.lower() in real_sku.lower():
                         sku_terdeteksi = real_sku
                         break
             
             if not sku_terdeteksi:
                 sku_terdeteksi = raw_val.split()[0] if " " in raw_val else raw_val
 
+            # Tambahkan kuantitas ke keranjang secara langsung tanpa rerun
             if sku_terdeteksi in st.session_state.scan_cart:
                 st.session_state.scan_cart[sku_terdeteksi] += 1
             else:
@@ -268,7 +270,7 @@ def ui_ambil_barang():
             st.session_state.quick_scan_input = ""
 
     st.text_input(
-        "Scan Kode SKU (Otomatis menambah jumlah +1):", 
+        "Scan Kode SKU (Setiap scan otomatis menambah jumlah +1):", 
         key="quick_scan_input", 
         on_change=process_scanned_sku,
         placeholder="Arahkan scanner ke barcode..."
@@ -282,7 +284,8 @@ def ui_ambil_barang():
             with c1:
                 st.write(f"📦 **{sku_item}**")
             with c2:
-                new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, value=qty, key=f"qty_num_{sku_item}", label_visibility="collapsed")
+                # Bisa diketik manual atau diubah langsung jumlahnya
+                new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, value=int(qty), key=f"qty_num_{sku_item}", label_visibility="collapsed")
                 st.session_state.scan_cart[sku_item] = new_qty
             with c3:
                 if st.button("❌", key=f"del_{sku_item}"):
