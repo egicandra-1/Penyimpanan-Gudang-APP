@@ -101,6 +101,16 @@ if "mode_aplikasi" not in st.session_state:
 
 def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
+    
+    # Menyiapkan memori untuk pesan notifikasi rak agar tidak hilang saat direfresh
+    if "pesan_sukses_rak" not in st.session_state:
+        st.session_state.pesan_sukses_rak = ""
+        
+    # Jika ada pesan sukses dari proses sebelumnya, tampilkan di sini
+    if st.session_state.pesan_sukses_rak:
+        st.success(st.session_state.pesan_sukses_rak)
+        st.session_state.pesan_sukses_rak = "" # Kosongkan setelah ditampilkan agar tidak muncul terus-menerus
+
     st.markdown("#### 🗄️ Kelola Rak")
     opsi_rak = ["[+ Tambah Rak Baru]"] + list(st.session_state.rak_gudang_tanpa_posisi.keys())
     rak_terpilih_mgt = st.selectbox("Pilih Tindakan / Nama Rak:", opsi_rak, key="rak_action_select")
@@ -112,7 +122,7 @@ def ui_manajemen_rak():
                 if t_rak not in st.session_state.rak_gudang_tanpa_posisi:
                     st.session_state.rak_gudang_tanpa_posisi[t_rak] = []
                     save_data_to_sheets()
-                    st.success(f"Rak '{t_rak}' ditambahkan!")
+                    st.session_state.pesan_sukses_rak = f"Rak '{t_rak}' berhasil ditambahkan!"
                     st.rerun()
                 else:
                     st.error("Nama rak sudah ada.")
@@ -124,7 +134,7 @@ def ui_manajemen_rak():
                 if nama_rak_baru not in st.session_state.rak_gudang_tanpa_posisi:
                     st.session_state.rak_gudang_tanpa_posisi[nama_rak_baru] = st.session_state.rak_gudang_tanpa_posisi.pop(rak_terpilih_mgt)
                     save_data_to_sheets()
-                    st.success("Nama rak diubah!")
+                    st.session_state.pesan_sukses_rak = f"Nama rak berhasil diubah menjadi '{nama_rak_baru}'!"
                     st.rerun()
                 else:
                     st.error("Nama rak sudah ada.")
@@ -132,7 +142,7 @@ def ui_manajemen_rak():
             if st.button(f"🗑️ Hapus {rak_terpilih_mgt}"):
                 st.session_state.rak_gudang_tanpa_posisi.pop(rak_terpilih_mgt)
                 save_data_to_sheets()
-                st.warning(f"'{rak_terpilih_mgt}' dihapus!")
+                st.session_state.pesan_sukses_rak = f"Rak '{rak_terpilih_mgt}' berhasil dihapus!"
                 st.rerun()
 
 def ui_pencarian_visual():
