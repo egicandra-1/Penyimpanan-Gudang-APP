@@ -160,6 +160,11 @@ def ui_pencarian_visual():
                 st.info(f"📦 SKU: **`{hasil['sku_penuh']}`** 📍 Rak: **{hasil['rak']}** (Stok: {hasil['stok']})")
         else:
             st.error(f"❌ Tidak ada SKU '{search_query}' di rak manapun.")
+            
+        # Tombol ini memungkinkan Anda mengosongkan kotak pencarian dengan cepat
+        if st.button("🧹 Bersihkan Hasil Pencarian"):
+            st.session_state.main_search_input = ""
+            st.rerun()
 
     st.markdown("---")
     st.markdown("### 📊 Visualisasi Isi Rak")
@@ -233,12 +238,16 @@ def ui_ambil_barang():
 
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} 
+        
+    if "scan_counter" not in st.session_state:
+        st.session_state.scan_counter = 0
 
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        # Membaca nilai dengan ID statis agar fokus kursor tidak pernah terputus
-        raw_val = st.session_state.quick_scan_input.strip()
+        current_key = f"quick_scan_input_{st.session_state.scan_counter}"
+        raw_val = st.session_state[current_key].strip()
+        
         if not raw_val:
             return
 
@@ -246,24 +255,22 @@ def ui_ambil_barang():
         
         if not rak_terpilih:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
-            st.session_state.quick_scan_input = ""
+            st.session_state.scan_counter += 1
             return
             
         if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
-            st.session_state.quick_scan_input = ""
+            st.session_state.scan_counter += 1
             return
 
         sku_terdeteksi = None
         daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
-        # LOGIKA CERDAS BARU: Membaca dari akhir teks untuk mendeteksi scan terbaru (mencegah salah baca bila menumpuk)
         for real_sku in daftar_sku_rak:
             if raw_val.lower().endswith(real_sku.lower()):
                 sku_terdeteksi = real_sku
                 break
         
-        # Fallback jika tidak ditemukan di akhir
         if not sku_terdeteksi:
             for real_sku in daftar_sku_rak:
                 if real_sku.lower() in raw_val.lower():
@@ -272,11 +279,10 @@ def ui_ambil_barang():
         
         if not sku_terdeteksi:
             sku_salah = raw_val.split()[-1] if " " in raw_val else raw_val[-10:]
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU tidak dikenali di rak '{rak_terpilih}'!"}
-            st.session_state.quick_scan_input = ""
+            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{sku_salah}' tidak ada di rak '{rak_terpilih}'!"}
+            st.session_state.scan_counter += 1
             return
 
-        # PENCEGAH BOLA SALJU (SNOWBALL): Sebanyak apapun teks menumpuk, setiap kali scanner berbunyi (Enter), hanya dihitung +1
         jumlah_scan = 1
 
         if sku_terdeteksi in st.session_state.scan_cart:
@@ -286,13 +292,11 @@ def ui_ambil_barang():
             
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
         
-        # Kosongkan kotak secara internal (kursor tetap diam di tempat)
-        st.session_state.quick_scan_input = ""
+        st.session_state.scan_counter += 1
 
-    # Menggunakan ID statis kembali
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
-        key="quick_scan_input", 
+        key=f"quick_scan_input_{st.session_state.scan_counter}", 
         on_change=process_scanned_sku,
         placeholder="Arahkan scanner ke barcode..."
     )
@@ -452,6 +456,7 @@ def ui_mutasi_barang():
         else:
             st.error(f"❌ Rak Asal '{mutasi_asal}' tidak valid atau belum dibuat.")
 
+    # Tambahan ID (Key) agar bisa di-reset otomatis nanti
     tujuan_rak = st.text_input("Nama Rak Tujuan:", key="mutasi_tujuan_input").strip()
 
     if st.button("🔄 Pindah Rak", use_container_width=True, type="primary"):
@@ -542,11 +547,12 @@ else:
             ui_mutasi_barang()
 
 
-# ==================== GLOBAL NOTIFICATION HANDLER ====================
+# ==================== GLOBAL NOTIFICATION & AUTO-CLEAR HANDLER ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
     
+    # Memunculkan notifikasi
     if tab_aktif in placeholders:
         if notif["type"] == "success":
             placeholders[tab_aktif].success(notif["text"])
@@ -555,8 +561,28 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
         elif notif["type"] == "warning":
             placeholders[tab_aktif].warning(notif["text"])
     
-    # Tunggu 2 detik agar notifikasi bisa dibaca, lalu bersihkan layar!
+    # Tunggu 2 detik agar Anda bisa membaca pesan tersebut
     time.sleep(2)
     
+    # --- MENGOSONGKAN SEMUA KOLOM INPUT SECARA OTOMATIS SESUAI TAB YANG AKTIF ---
+    if tab_aktif == "rak":
+        if "edit_rak_name_input" in st.session_state: 
+            st.session_state.edit_rak_name_input = ""
+            
+    elif tab_aktif == "input":
+        if "input_sku_field" in st.session_state: st.session_state.input_sku_field = ""
+        if "input_stok_field" in st.session_state: st.session_state.input_stok_field = ""
+        if "input_rak_field" in st.session_state: st.session_state.input_rak_field = ""
+        
+    elif tab_aktif == "ambil":
+        if "ambil_rak_field" in st.session_state: st.session_state.ambil_rak_field = ""
+        
+    elif tab_aktif == "mutasi":
+        if "mutasi_asal_input" in st.session_state: st.session_state.mutasi_asal_input = ""
+        if "mutasi_sku_input" in st.session_state: st.session_state.mutasi_sku_input = ""
+        if "mutasi_tujuan_input" in st.session_state: st.session_state.mutasi_tujuan_input = ""
+        if "mutasi_dropdown_kembar" in st.session_state: del st.session_state["mutasi_dropdown_kembar"]
+    
+    # Hapus jejak notifikasi dari memori dan bersihkan layar
     st.session_state.global_notif = None
     st.rerun()
