@@ -144,14 +144,18 @@ def ui_manajemen_rak():
                 st.rerun()
 
 def ui_pencarian_visual():
-    st.markdown("### 🔍 Pencarian Barang")
-    search_query = st.text_input("Masukkan Kode SKU:", placeholder="Contoh: ketik 'mj' atau '459'...", key="main_search_input").strip()
+    st.markdown("### 🔍 Pencarian Barang / Rak")
+    search_query = st.text_input("Masukkan Kode SKU atau Nama Rak:", placeholder="Contoh: ketik 'mj', '459', atau 'A-1'...", key="main_search_input").strip()
 
     if search_query:
         hasil_cari = []
         for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
+            rak_cocok = search_query.lower() in nama_rak.lower()
+            
             for item in daftar_item:
-                if search_query.lower() in item["sku"].lower():
+                sku_cocok = search_query.lower() in item["sku"].lower()
+                
+                if rak_cocok or sku_cocok:
                     hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
 
         if hasil_cari:
@@ -159,7 +163,7 @@ def ui_pencarian_visual():
             for hasil in hasil_cari:
                 st.info(f"📦 SKU: **`{hasil['sku_penuh']}`** 📍 Rak: **{hasil['rak']}** (Stok: {hasil['stok']})")
         else:
-            st.error(f"❌ Tidak ada SKU '{search_query}' di rak manapun.")
+            st.error(f"❌ Tidak ada hasil untuk '{search_query}' pada SKU maupun Nama Rak manapun.")
 
     st.markdown("---")
     st.markdown("### 📊 Visualisasi Isi Rak")
@@ -237,7 +241,6 @@ def ui_ambil_barang():
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        # Membaca nilai dengan ID statis agar fokus kursor tidak pernah terputus
         raw_val = st.session_state.quick_scan_input.strip()
         if not raw_val:
             return
@@ -257,13 +260,11 @@ def ui_ambil_barang():
         sku_terdeteksi = None
         daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
-        # LOGIKA CERDAS BARU: Membaca dari akhir teks untuk mendeteksi scan terbaru (mencegah salah baca bila menumpuk)
         for real_sku in daftar_sku_rak:
             if raw_val.lower().endswith(real_sku.lower()):
                 sku_terdeteksi = real_sku
                 break
         
-        # Fallback jika tidak ditemukan di akhir
         if not sku_terdeteksi:
             for real_sku in daftar_sku_rak:
                 if real_sku.lower() in raw_val.lower():
@@ -276,7 +277,6 @@ def ui_ambil_barang():
             st.session_state.quick_scan_input = ""
             return
 
-        # PENCEGAH BOLA SALJU (SNOWBALL): Sebanyak apapun teks menumpuk, setiap kali scanner berbunyi (Enter), hanya dihitung +1
         jumlah_scan = 1
 
         if sku_terdeteksi in st.session_state.scan_cart:
@@ -286,10 +286,8 @@ def ui_ambil_barang():
             
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
         
-        # Kosongkan kotak secara internal (kursor tetap diam di tempat)
         st.session_state.quick_scan_input = ""
 
-    # Menggunakan ID statis kembali
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
         key="quick_scan_input", 
