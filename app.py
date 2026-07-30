@@ -226,18 +226,35 @@ def ui_input_barang():
             st.rerun()
 
 def ui_ambil_barang():
-    st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
-    
+    st.markdown("### 📤 Ambil Barang (Scan Berulang = Tambah Jumlah)")
+
     if "error_ambil_pesan" not in st.session_state:
         st.session_state.error_ambil_pesan = ""
+    if "last_scanned_sku" not in st.session_state:
+        st.session_state.last_scanned_sku = ""
+    if "auto_count" not in st.session_state:
+        st.session_state.auto_count = 1
 
     if st.session_state.error_ambil_pesan:
         st.error(st.session_state.error_ambil_pesan)
         st.session_state.error_ambil_pesan = ""
 
-    # Tanpa st.form agar aman dari auto-submit saat di-scan
-    ambil_sku = st.text_input("Ketik Kode SKU yang Diambil:", key="ambil_sku_field").strip()
-    ambil_jumlah_raw = st.text_input("Jumlah yang Diambil (Kosongkan = Ambil 1 pcs):", key="ambil_jumlah_field").strip()
+    # Callback untuk mendeteksi saat scanner memasukkan SKU baru atau scan ulang
+    def on_sku_change():
+        current_sku = st.session_state.ambil_sku_field.strip()
+        if current_sku:
+            if current_sku == st.session_state.last_scanned_sku:
+                st.session_state.auto_count += 1
+            else:
+                st.session_state.last_scanned_sku = current_sku
+                st.session_state.auto_count = 1
+
+    # Kotak SKU (Kursor utama di sini)
+    ambil_sku = st.text_input("Scan / Ketik Kode SKU yang Diambil:", key="ambil_sku_field", on_change=on_sku_change).strip()
+    
+    # Kotak Jumlah (Akan bertambah otomatis jika SKU yang sama di-scan berulang)
+    ambil_jumlah_raw = st.text_input("Jumlah yang Diambil (Bertambah otomatis saat scan ulang):", value=str(st.session_state.auto_count), key="ambil_jumlah_field").strip()
+    
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     btn_proses_ambil = st.button("Proses Ambil Barang", use_container_width=True)
@@ -250,7 +267,7 @@ def ui_ambil_barang():
             st.session_state.error_ambil_pesan = f"❌ Rak '{ambil_rak}' tidak terdaftar."
             st.rerun()
         else:
-            # Jika kolom jumlah dikosongkan, otomatis diatur bernilai 1
+            # Ambil nilai dari kotak jumlah (mendukung ketik manual atau hasil hitung scan)
             if not ambil_jumlah_raw:
                 jumlah_ambil = 1
             elif ambil_jumlah_raw.isdigit():
@@ -272,11 +289,13 @@ def ui_ambil_barang():
                     rak_items.remove(item_ditemukan)
                     save_data_to_sheets()
                     st.warning(f"⚠️ Stok habis! SKU '{ambil_sku}' dihapus dari rak.")
+                    st.session_state.auto_count = 1  # Reset hitungan
                     st.rerun()
                 else:
                     item_ditemukan["stok"] -= jumlah_ambil
                     save_data_to_sheets()
                     st.success(f"Berhasil ambil {jumlah_ambil} pcs dari SKU '{ambil_sku}'. Sisa stok: {item_ditemukan['stok']}")
+                    st.session_state.auto_count = 1  # Reset hitungan setelah sukses
                     st.rerun()
             else:
                 st.session_state.error_ambil_pesan = f"❌ SKU '{ambil_sku}' tidak ditemukan di rak '{ambil_rak}'."
