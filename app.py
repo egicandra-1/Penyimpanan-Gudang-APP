@@ -105,13 +105,11 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
-# Tombol Bersihkan Cari akan mengaktifkan pending_clear_cari
 if "pending_clear_cari" in st.session_state and st.session_state.pending_clear_cari:
     if "main_search_input" in st.session_state:
         st.session_state.main_search_input = ""
     st.session_state.pending_clear_cari = False
 
-# Jika ada notifikasi baru, bersihkan teks SEBELUM layar digambar agar tidak ERROR
 if "global_notif" in st.session_state and st.session_state.global_notif:
     tab_to_clear = st.session_state.global_notif["tab"]
     
@@ -314,7 +312,6 @@ def ui_ambil_barang():
             st.session_state.scan_counter += 1
             return
 
-        # PENCEGAH BOLA SALJU: Setiap kali enter, hitung selalu sebagai +1
         jumlah_scan = 1
 
         if sku_terdeteksi in st.session_state.scan_cart:
@@ -332,22 +329,26 @@ def ui_ambil_barang():
         placeholder="Arahkan scanner ke barcode..."
     )
 
-    # SUNTIKAN JAVASCRIPT KURSOR MAGNET: Mencegah kursor terlepas
+    # SUNTIKAN JAVASCRIPT KURSOR MAGNET YANG SELALU AKTIF
+    # Kita menggunakan time.time() agar Streamlit mendeteksi ini sebagai skrip baru setiap kali layar direfresh
     components.html(
-        """
+        f"""
         <script>
+        // Trigger pembaruan: {time.time()}
         const doc = window.parent.document;
-        function setFocus() {
+        function setFocus() {{
             const inputs = doc.querySelectorAll('input');
-            for (let i = 0; i < inputs.length; i++) {
-                if (inputs[i].placeholder === 'Arahkan scanner ke barcode...') {
+            for (let i = 0; i < inputs.length; i++) {{
+                if (inputs[i].placeholder === 'Arahkan scanner ke barcode...') {{
                     inputs[i].focus();
                     break;
-                }
-            }
-        }
+                }}
+            }}
+        }}
         setFocus();
-        setTimeout(setFocus, 100);
+        setTimeout(setFocus, 50);
+        setTimeout(setFocus, 150);
+        setTimeout(setFocus, 300);
         setTimeout(setFocus, 500);
         </script>
         """,
@@ -388,6 +389,10 @@ def ui_ambil_barang():
                 with col4:
                     if st.button("❌", key=f"del_{sku_item}"):
                         del st.session_state.scan_cart[sku_item]
+                        if f"qty_num_{sku_item}" in st.session_state:
+                            del st.session_state[f"qty_num_{sku_item}"]
+                        if f"target_batch_{sku_item}" in st.session_state:
+                            del st.session_state[f"target_batch_{sku_item}"]
                         st.rerun()
             else:
                 col1, col2, col3 = st.columns([2, 2, 1])
@@ -404,6 +409,8 @@ def ui_ambil_barang():
                 with col3:
                     if st.button("❌", key=f"del_{sku_item}"):
                         del st.session_state.scan_cart[sku_item]
+                        if f"qty_num_{sku_item}" in st.session_state:
+                            del st.session_state[f"qty_num_{sku_item}"]
                         st.rerun()
             
             total_items += st.session_state.scan_cart.get(sku_item, 0)
@@ -454,14 +461,23 @@ def ui_ambil_barang():
 
                     if berhasil:
                         save_data_to_sheets()
-                        st.session_state.scan_cart = {}
                         st.session_state.global_notif = {"tab": "ambil", "type": "success", "text": "Berhasil! " + " | ".join(pesan_hasil)}
+                        for sku_item in list(st.session_state.scan_cart.keys()):
+                            if f"qty_num_{sku_item}" in st.session_state:
+                                del st.session_state[f"qty_num_{sku_item}"]
+                            if f"target_batch_{sku_item}" in st.session_state:
+                                del st.session_state[f"target_batch_{sku_item}"]
+                        st.session_state.scan_cart = {}
                         st.rerun()
 
         with c_b2:
             if st.button("🗑️ Reset Daftar", use_container_width=True):
+                for sku_item in list(st.session_state.scan_cart.keys()):
+                    if f"qty_num_{sku_item}" in st.session_state:
+                        del st.session_state[f"qty_num_{sku_item}"]
+                    if f"target_batch_{sku_item}" in st.session_state:
+                        del st.session_state[f"target_batch_{sku_item}"]
                 st.session_state.scan_cart = {}
-                st.session_state.global_notif = {"tab": "ambil", "type": "warning", "text": "Daftar keranjang telah direset."}
                 st.rerun()
     else:
         st.info("💡 Ketik nama rak dulu, lalu scan barcode Anda berulang kali di kotak atas.")
@@ -585,12 +601,11 @@ else:
             ui_mutasi_barang()
 
 
-# ==================== GLOBAL NOTIFICATION & AUTO-CLEAR ====================
+# ==================== GLOBAL NOTIFICATION HANDLER ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
     
-    # 1. Tampilkan Notifikasi
     if tab_aktif in placeholders:
         if notif["type"] == "success":
             placeholders[tab_aktif].success(notif["text"])
@@ -599,9 +614,7 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
         elif notif["type"] == "warning":
             placeholders[tab_aktif].warning(notif["text"])
     
-    # 2. Tunggu 2 detik agar Anda bisa membacanya
     time.sleep(2)
     
-    # 3. Hapus notifikasi dari memori dan restart layar menjadi benar-benar bersih!
     st.session_state.global_notif = None
     st.rerun()
