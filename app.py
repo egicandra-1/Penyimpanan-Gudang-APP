@@ -311,25 +311,64 @@ def ui_ambil_barang():
     if st.session_state.scan_cart:
         st.markdown("#### 🛒 Daftar Barang yang Akan Dikurangi:")
         total_items = 0
+        
+        rak_aktif = st.session_state.ambil_rak_field.strip()
+        items_di_rak = st.session_state.rak_gudang_tanpa_posisi.get(rak_aktif, [])
+
         for sku_item, qty in list(st.session_state.scan_cart.items()):
-            col1, col2, col3 = st.columns([2, 2, 1])
-            with col1:
-                st.write(f"📦 **{sku_item}**")
-            with col2:
-                new_qty = st.number_input(
-                    f"Jumlah {sku_item}", 
-                    min_value=1, 
-                    key=f"qty_num_{sku_item}", 
-                    label_visibility="collapsed"
-                )
-                st.session_state.scan_cart[sku_item] = new_qty
-            with col3:
-                if st.button("❌", key=f"del_{sku_item}"):
-                    del st.session_state.scan_cart[sku_item]
-                    if f"qty_num_{sku_item}" in st.session_state:
-                        del st.session_state[f"qty_num_{sku_item}"]
-                    st.rerun()
-            total_items += st.session_state.scan_cart[sku_item]
+            # Cek apakah ada SKU kembar (duplikat) di rak ini
+            matching_items = [item for item in items_di_rak if item["sku"].lower() == sku_item.lower()]
+            
+            # Jika ada kembar (lebih dari 1 entri), tampilkan dropdown pilihan Target Stok
+            if len(matching_items) > 1:
+                col1, col2, col3, col4 = st.columns([1.5, 2.5, 1.5, 1])
+                with col1:
+                    st.write(f"📦 **{sku_item}**")
+                with col2:
+                    opsi_stok = [f"Stok Asal: {item['stok']}" for item in matching_items]
+                    st.selectbox(
+                        "Pilih Target", 
+                        opsi_stok, 
+                        key=f"target_batch_{sku_item}", 
+                        label_visibility="collapsed"
+                    )
+                with col3:
+                    new_qty = st.number_input(
+                        f"Jumlah {sku_item}", 
+                        min_value=1, 
+                        key=f"qty_num_{sku_item}", 
+                        label_visibility="collapsed"
+                    )
+                    st.session_state.scan_cart[sku_item] = new_qty
+                with col4:
+                    if st.button("❌", key=f"del_{sku_item}"):
+                        del st.session_state.scan_cart[sku_item]
+                        if f"qty_num_{sku_item}" in st.session_state:
+                            del st.session_state[f"qty_num_{sku_item}"]
+                        if f"target_batch_{sku_item}" in st.session_state:
+                            del st.session_state[f"target_batch_{sku_item}"]
+                        st.rerun()
+            else:
+                # Jika normal (hanya 1), tampilkan biasa tanpa dropdown
+                col1, col2, col3 = st.columns([2, 2, 1])
+                with col1:
+                    st.write(f"📦 **{sku_item}**")
+                with col2:
+                    new_qty = st.number_input(
+                        f"Jumlah {sku_item}", 
+                        min_value=1, 
+                        key=f"qty_num_{sku_item}", 
+                        label_visibility="collapsed"
+                    )
+                    st.session_state.scan_cart[sku_item] = new_qty
+                with col3:
+                    if st.button("❌", key=f"del_{sku_item}"):
+                        del st.session_state.scan_cart[sku_item]
+                        if f"qty_num_{sku_item}" in st.session_state:
+                            del st.session_state[f"qty_num_{sku_item}"]
+                        st.rerun()
+            
+            total_items += st.session_state.scan_cart.get(sku_item, 0)
 
         st.markdown(f"**Total Keseluruhan Stok yang Dikurangi:** {total_items} pcs")
 
@@ -348,23 +387,33 @@ def ui_ambil_barang():
                     pesan_hasil = []
 
                     for sku_to_reduce, qty_to_reduce in st.session_state.scan_cart.items():
+                        matching_items_cek = [item for item in rak_items if sku_to_reduce.lower() == item["sku"].lower()]
                         item_ditemukan = None
-                        for item in rak_items:
-                            if sku_to_reduce.lower() == item["sku"].lower():
-                                item_ditemukan = item
-                                break
+                        
+                        # Tentukan item spesifik yang akan dikurangi
+                        if len(matching_items_cek) > 1:
+                            target_str = st.session_state.get(f"target_batch_{sku_to_reduce}")
+                            if target_str:
+                                target_stok = int(target_str.replace("Stok Asal: ", ""))
+                                item_ditemukan = next((item for item in matching_items_cek if item["stok"] == target_stok), None)
+                        elif len(matching_items_cek) == 1:
+                            item_ditemukan = matching_items_cek[0]
                         
                         if item_ditemukan:
-                            if qty_to_reduce >= item_ditemukan["stok"]:
+                            if qty_to_reduce > item_ditemukan["stok"]:
+                                st.session_state.error_ambil_pesan = f"❌ Gagal! Stok untuk SKU '{sku_to_reduce}' (Sisa: {item_ditemukan['stok']}) tidak cukup."
+                                berhasil = False
+                                break
+                            elif qty_to_reduce == item_ditemukan["stok"]:
                                 rak_items.remove(item_ditemukan)
-                                pesan_hasil.append(f"SKU '{item_ditemukan['sku']}' habis & dihapus.")
+                                pesan_hasil.append(f"SKU '{item_ditemukan['sku']}' (Isi {qty_to_reduce}) habis & dihapus.")
                             else:
                                 item_ditemukan["stok"] -= qty_to_reduce
                                 pesan_hasil.append(f"SKU '{item_ditemukan['sku']}' dikurangi {qty_to_reduce} pcs.")
                         else:
                             berhasil = False
                             st.session_state.error_ambil_pesan = f"❌ SKU '{sku_to_reduce}' tidak ditemukan di rak '{ambil_rak}'."
-                            st.rerun()
+                            break
 
                     if berhasil:
                         save_data_to_sheets()
@@ -372,6 +421,8 @@ def ui_ambil_barang():
                         for sku_item in list(st.session_state.scan_cart.keys()):
                             if f"qty_num_{sku_item}" in st.session_state:
                                 del st.session_state[f"qty_num_{sku_item}"]
+                            if f"target_batch_{sku_item}" in st.session_state:
+                                del st.session_state[f"target_batch_{sku_item}"]
                         st.session_state.scan_cart = {}
                         st.rerun()
 
@@ -380,6 +431,8 @@ def ui_ambil_barang():
                 for sku_item in list(st.session_state.scan_cart.keys()):
                     if f"qty_num_{sku_item}" in st.session_state:
                         del st.session_state[f"qty_num_{sku_item}"]
+                    if f"target_batch_{sku_item}" in st.session_state:
+                        del st.session_state[f"target_batch_{sku_item}"]
                 st.session_state.scan_cart = {}
                 st.rerun()
     else:
@@ -389,10 +442,7 @@ def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     with st.form("form_mutasi_direct"):
         mutasi_sku = st.text_input("Kode SKU yang Dipindah:").strip()
-        
-        # TAB TAMBAHAN: Untuk membedakan barang yang kodenya sama persis tapi stoknya beda
         mutasi_jumlah = st.text_input("Jumlah Stok (Ketik angka stok untuk memilih item spesifik, cth: 5):", placeholder="Kosongkan jika hanya ada 1 jenis SKU").strip()
-        
         mutasi_asal = st.text_input("Nama Rak Asal:").strip()
         tujuan_rak = st.text_input("Nama Rak Tujuan:").strip()
 
@@ -407,12 +457,10 @@ def ui_mutasi_barang():
                 rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
                 item_ditemukan = None
                 
-                # 1. Cari spesifik berdasarkan angka stok jika diisi (untuk membedakan barang kembar)
                 if mutasi_jumlah.isdigit():
                     target_stok = int(mutasi_jumlah)
                     item_ditemukan = next((item for item in rak_asal_items if item["sku"].lower() == mutasi_sku.lower() and item["stok"] == target_stok), None)
                 
-                # 2. Jika kolom dikosongkan atau tidak ketemu stoknya, cari berdasarkan SKU saja (yang pertama ketemu)
                 if not item_ditemukan:
                     item_ditemukan = next((item for item in rak_asal_items if item["sku"].lower() == mutasi_sku.lower()), None)
 
