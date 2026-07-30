@@ -202,6 +202,7 @@ def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     placeholders["input"] = st.empty() 
 
+    # Kolom input SKU manual biasa (tanpa aksi enter otomatis)
     edit_sku = st.text_input("Masukkan Kode SKU:", key="input_sku_field").strip()
     edit_stok_raw = st.text_input("Jumlah Stok:", key="input_stok_field").strip()
     edit_rak = st.text_input("Ketik Nama Rak Tujuan:", key="input_rak_field").strip()
