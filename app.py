@@ -2,7 +2,6 @@ from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
 import json
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Slotting Rak Sederhana", layout="wide")
 
@@ -97,20 +96,6 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
-# Fungsi untuk memaksa kursor fokus ke kotak input otomatis via JavaScript
-def auto_focus_script():
-    js = """
-    <script>
-        const inputs = window.parent.document.querySelectorAll("input[type='text']");
-        if (inputs.length > 0) {
-            // Ambil kotak input aktif terakhir di layar
-            const targetInput = inputs[inputs.length - 1];
-            targetInput.focus();
-        }
-    </script>
-    """
-    components.html(js, height=0, width=0)
-
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
@@ -194,7 +179,7 @@ def ui_input_barang(prefix_key=""):
 
     current_step = st.session_state[f"step_{prefix_key}"]
 
-    if current_step >= 1:
+    if current_step == 1:
         with st.form(f"form_sku_{prefix_key}"):
             sku_input = st.text_input("1️⃣ Masukkan / Scan Kode SKU:", value=st.session_state[f"val_sku_{prefix_key}"], placeholder="Ketik atau scan SKU lalu Enter...").strip()
             submitted_sku = st.form_submit_button("Lanjut ke Stok ➡️")
@@ -204,7 +189,7 @@ def ui_input_barang(prefix_key=""):
                 st.session_state[f"step_{prefix_key}"] = 2
                 st.rerun()
 
-    if current_step >= 2:
+    elif current_step == 2:
         with st.form(f"form_stok_{prefix_key}"):
             st.info(f"📌 SKU Terpilih: **`{st.session_state[f'val_sku_{prefix_key}']}`**")
             stok_input = st.text_input("2️⃣ Masukkan Jumlah Stok:", value=st.session_state[f"val_stok_{prefix_key}"], placeholder="Contoh: 500 lalu Enter...").strip()
@@ -229,7 +214,7 @@ def ui_input_barang(prefix_key=""):
                     st.session_state[f"step_{prefix_key}"] = 3
                     st.rerun()
 
-    if current_step >= 3:
+    elif current_step == 3:
         with st.form(f"form_rak_{prefix_key}"):
             st.info(f"📌 SKU: **`{st.session_state[f'val_sku_{prefix_key}']}`** | Stok: **{st.session_state[f'val_stok_{prefix_key}']}**")
             rak_input = st.text_input("3️⃣ Ketik Nama Rak Tujuan:", value=st.session_state[f'val_rak_{prefix_key}'], placeholder="Contoh: Rak A1...").strip()
@@ -286,8 +271,6 @@ def ui_input_barang(prefix_key=""):
                     st.rerun()
                 else:
                     st.error(f"❌ Rak '{h_rak}' tidak ditemukan.")
-                    
-    auto_focus_script()
 
 def ui_ambil_barang(prefix_key=""):
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
@@ -300,7 +283,7 @@ def ui_ambil_barang(prefix_key=""):
 
     current_step = st.session_state[f"step_ambil_{prefix_key}"]
 
-    if current_step >= 1:
+    if current_step == 1:
         with st.form(f"form_ambil_sku_{prefix_key}"):
             sku_input = st.text_input("1️⃣ Ketik Kode SKU yang Diambil:", value=st.session_state[f"val_ambil_sku_{prefix_key}"], placeholder="Ketik atau scan SKU lalu Enter...").strip()
             submitted_sku = st.form_submit_button("Lanjut ke Jumlah ➡️")
@@ -311,7 +294,7 @@ def ui_ambil_barang(prefix_key=""):
                 st.session_state[f"step_ambil_{prefix_key}"] = 2
                 st.rerun()
 
-    if current_step >= 2:
+    elif current_step == 2:
         with st.form(f"form_ambil_stok_{prefix_key}"):
             st.info(f"📌 SKU Terpilih: **`{st.session_state[f'val_ambil_sku_{prefix_key}']}`**")
             stok_input = st.text_input("2️⃣ Jumlah yang Diambil:", value=st.session_state[f"val_ambil_stok_{prefix_key}"], placeholder="Ketik angka atau biarkan kosong untuk scan +1...").strip()
@@ -343,7 +326,7 @@ def ui_ambil_barang(prefix_key=""):
                     st.session_state[f"step_ambil_{prefix_key}"] = 3
                     st.rerun()
 
-    if current_step >= 3:
+    elif current_step == 3:
         with st.form(f"form_ambil_rak_{prefix_key}"):
             st.info(f"📌 SKU: **`{st.session_state[f'val_ambil_sku_{prefix_key}']}`** | Jumlah Ambil: **{st.session_state[f'val_ambil_stok_{prefix_key}']}**")
             rak_input = st.text_input("3️⃣ Ketik Nama Rak Asal:", value=st.session_state[f'val_ambil_rak_{prefix_key}'], placeholder="Contoh: Rak A1...").strip()
@@ -391,8 +374,6 @@ def ui_ambil_barang(prefix_key=""):
                         st.rerun()
                     else:
                         st.error(f"❌ SKU '{sku_val}' tidak ditemukan di rak '{rak_input}'.")
-                        
-    auto_focus_script()
 
 def ui_mutasi_barang(prefix_key=""):
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
@@ -405,7 +386,7 @@ def ui_mutasi_barang(prefix_key=""):
 
     current_step = st.session_state[f"step_mutasi_{prefix_key}"]
 
-    if current_step >= 1:
+    if current_step == 1:
         with st.form(f"form_mutasi_sku_{prefix_key}"):
             sku_input = st.text_input("1️⃣ Kode SKU yang Dipindah:", value=st.session_state[f"val_mutasi_sku_{prefix_key}"], placeholder="Ketik atau scan SKU lalu Enter...").strip()
             submitted_sku = st.form_submit_button("Lanjut ke Rak Asal ➡️")
@@ -415,7 +396,7 @@ def ui_mutasi_barang(prefix_key=""):
                 st.session_state[f"step_mutasi_{prefix_key}"] = 2
                 st.rerun()
 
-    if current_step >= 2:
+    elif current_step == 2:
         with st.form(f"form_mutasi_asal_{prefix_key}"):
             st.info(f"📌 SKU Dipindah: **`{st.session_state[f'val_mutasi_sku_{prefix_key}']}`**")
             asal_input = st.text_input("2️⃣ Nama Rak Asal:", value=st.session_state[f"val_mutasi_asal_{prefix_key}"], placeholder="Ketik atau scan Rak Asal lalu Enter...").strip()
@@ -437,7 +418,7 @@ def ui_mutasi_barang(prefix_key=""):
                 st.session_state[f"step_mutasi_{prefix_key}"] = 3
                 st.rerun()
 
-    if current_step >= 3:
+    elif current_step == 3:
         with st.form(f"form_mutasi_tujuan_{prefix_key}"):
             st.info(f"📌 SKU: **`{st.session_state[f'val_mutasi_sku_{prefix_key}']}`** | Dari Rak: **{st.session_state[f'val_mutasi_asal_{prefix_key}']}**")
             tujuan_input = st.text_input("3️⃣ Nama Rak Tujuan:", value=st.session_state[f'val_mutasi_tujuan_{prefix_key}'], placeholder="Ketik atau scan Rak Tujuan...").strip()
@@ -480,8 +461,6 @@ def ui_mutasi_barang(prefix_key=""):
                         st.rerun()
                     else:
                         st.error(f"❌ SKU '{sku_val}' tidak ditemukan di rak '{asal_val}'.")
-                        
-    auto_focus_script()
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
