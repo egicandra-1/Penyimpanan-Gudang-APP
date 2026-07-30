@@ -235,13 +235,21 @@ def ui_ambil_barang():
         st.error(st.session_state.error_ambil_pesan)
         st.session_state.error_ambil_pesan = ""
 
-    # Kotak 1 khusus Scan SKU
-    ambil_sku = st.text_input("Scan / Ketik Kode SKU:", key="ambil_sku_field").strip()
+    # Kotak SKU (hanya ambil bagian teks pertama jika scanner menembak teks panjang gabungan)
+    raw_sku_input = st.text_input("Scan / Ketik Kode SKU:", key="ambil_sku_field", placeholder="Scan barcode disini...").strip()
     
-    # Kotak 2 khusus Jumlah Pengurangan (bisa diketik angka jumlahnya)
-    ambil_jumlah_raw = st.text_input("Jumlah Pengurangan Stok:", value="1", key="ambil_jumlah_field").strip()
+    # Membersihkan teks jika scanner menembak gabungan (misal mengambil kata kunci SKU yang bersih)
+    ambil_sku = raw_sku_input.split("MJ")[0] + "MJ" + raw_sku_input.split("MJ")[-1] if "MJ" in raw_sku_input else raw_sku_input
+    # Atau versi aman: ambil kata pertama atau teks bersih sebelum karakter enter/duplikat
+    if raw_sku_input and len(raw_sku_input) > 15:
+        # Jika teks terlalu panjang karena menumpuk, ambil potongan pertama yang masuk akal (misal 5-8 karakter pertama)
+        ambil_sku = raw_sku_input[:5].strip() 
+    else:
+        ambil_sku = raw_sku_input
+
+    # Kolom jumlah benar-benar kosong (nilai default "")
+    ambil_jumlah_raw = st.text_input("Jumlah Pengurangan Stok (Kosongkan = 1 pcs):", value="", key="ambil_jumlah_field", placeholder="Kosongkan jika 1 pcs").strip()
     
-    # Kotak 3 Rak Asal
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     btn_proses_ambil = st.button("Konfirmasi Pengurangan Stok", use_container_width=True, type="primary")
@@ -250,18 +258,23 @@ def ui_ambil_barang():
         if not ambil_sku:
             st.session_state.error_ambil_pesan = "❌ Kode SKU harus diisi / di-scan!"
             st.rerun()
-        elif not ambil_jumlah_raw.isdigit():
-            st.session_state.error_ambil_pesan = "❌ Jumlah pengurangan harus berupa angka!"
-            st.rerun()
         elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.error_ambil_pesan = f"❌ Rak '{ambil_rak}' tidak terdaftar."
             st.rerun()
         else:
-            jumlah_ambil = int(ambil_jumlah_raw)
+            # Jika kotak jumlah kosong, otomatis jadi 1. Jika diisi angka, gunakan angka tersebut.
+            if not ambil_jumlah_raw:
+                jumlah_ambil = 1
+            elif ambil_jumlah_raw.isdigit():
+                jumlah_ambil = int(ambil_jumlah_raw)
+            else:
+                st.session_state.error_ambil_pesan = "❌ Jumlah pengurangan harus berupa angka!"
+                st.rerun()
+
             rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
             item_ditemukan = None
             for item in rak_items:
-                if item["sku"].lower() == ambil_sku.lower():
+                if item["sku"].lower() in ambil_sku.lower() or ambil_sku.lower() in item["sku"].lower():
                     item_ditemukan = item
                     break
 
@@ -270,12 +283,12 @@ def ui_ambil_barang():
                 if jumlah_ambil >= stok_sekarang:
                     rak_items.remove(item_ditemukan)
                     save_data_to_sheets()
-                    st.warning(f"⚠️ Stok habis! SKU '{ambil_sku}' dihapus dari rak.")
+                    st.warning(f"⚠️ Stok habis! SKU '{item_ditemukan['sku']}' dihapus dari rak.")
                     st.rerun()
                 else:
                     item_ditemukan["stok"] -= jumlah_ambil
                     save_data_to_sheets()
-                    st.success(f"Berhasil mengurangi {jumlah_ambil} pcs dari SKU '{ambil_sku}'. Sisa stok: {item_ditemukan['stok']}")
+                    st.success(f"Berhasil mengurangi {jumlah_ambil} pcs dari SKU '{item_ditemukan['sku']}'. Sisa stok: {item_ditemukan['stok']}")
                     st.rerun()
             else:
                 st.session_state.error_ambil_pesan = f"❌ SKU '{ambil_sku}' tidak ditemukan di rak '{ambil_rak}'."
@@ -352,7 +365,7 @@ else:
             ui_input_barang()
             st.markdown("---")
             ui_ambil_barang()
-            st.markdown---()
+            st.markdown("---")
             ui_mutasi_barang()
     else:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "📤 Ambil", "🔄 Mutasi"])
