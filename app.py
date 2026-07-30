@@ -11,7 +11,6 @@ SCOPE = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-# Tempat penyimpanan wadah notifikasi sementara
 placeholders = {}
 
 @st.cache_resource
@@ -101,21 +100,6 @@ if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
 
-# ====================================================================================
-# PEMBERSIH KOLOM DARI ATAS UNTUK TAB SELAIN INPUT
-# ====================================================================================
-if "global_notif" in st.session_state and st.session_state.global_notif:
-    notif = st.session_state.global_notif
-    tab_to_clear = notif["tab"]
-    if tab_to_clear == "ambil":
-        if "ambil_rak_field" in st.session_state: st.session_state.ambil_rak_field = ""
-    elif tab_to_clear == "mutasi":
-        if "mutasi_asal_input" in st.session_state: st.session_state.mutasi_asal_input = ""
-        if "mutasi_sku_input" in st.session_state: st.session_state.mutasi_sku_input = ""
-        if "mutasi_tujuan_input" in st.session_state: st.session_state.mutasi_tujuan_input = ""
-        if "mutasi_dropdown_kembar" in st.session_state: del st.session_state["mutasi_dropdown_kembar"]
-
-
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
 def ui_manajemen_rak():
@@ -199,54 +183,59 @@ def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     placeholders["input"] = st.empty() 
 
-    # Menggunakan st.form dengan clear_on_submit=True agar kolom input otomatis kosong instan tanpa error
-    with st.form("form_input_barang", clear_on_submit=True):
-        edit_sku = st.text_input("Masukkan Kode SKU:").strip()
-        edit_stok_raw = st.text_input("Jumlah Stok:").strip()
-        edit_rak = st.text_input("Ketik Nama Rak Tujuan:").strip()
+    # Input manual biasa tanpa form agar bebas dari teks 'Press Enter to submit form'
+    edit_sku = st.text_input("Masukkan Kode SKU:", key="input_sku_field").strip()
+    edit_stok_raw = st.text_input("Jumlah Stok:", key="input_stok_field").strip()
+    edit_rak = st.text_input("Ketik Nama Rak Tujuan:", key="input_rak_field").strip()
 
-        c_b1, c_b2 = st.columns(2)
-        with c_b1:
-            btn_simpan = st.form_submit_button("Simpan ke Rak", use_container_width=True)
-        with c_b2:
-            btn_hapus = st.form_submit_button("Hapus SKU", use_container_width=True)
+    c_b1, c_b2 = st.columns(2)
+    with c_b1:
+        btn_simpan = st.button("Simpan ke Rak", use_container_width=True)
+    with c_b2:
+        btn_hapus = st.button("Hapus SKU", use_container_width=True)
 
-        if btn_simpan:
-            if not edit_sku:
-                st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Kode SKU harus diisi!"}
-                st.rerun()
-            elif not edit_stok_raw.isdigit():
-                st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Stok harus angka!"}
-                st.rerun()
-            elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{edit_rak}' tidak terdaftar."}
-                st.rerun()
-            else:
-                edit_stok = int(edit_stok_raw)
-                rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-                rak_items.append({"sku": edit_sku, "stok": edit_stok})
+    if btn_simpan:
+        if not edit_sku:
+            st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Kode SKU harus diisi!"}
+            st.rerun()
+        elif not edit_stok_raw.isdigit():
+            st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Stok harus angka!"}
+            st.rerun()
+        elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{edit_rak}' tidak terdaftar."}
+            st.rerun()
+        else:
+            edit_stok = int(edit_stok_raw)
+            rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
+            rak_items.append({"sku": edit_sku, "stok": edit_stok})
+            save_data_to_sheets()
+            
+            # Kosongkan kolom input secara instan tanpa jeda waktu dan tanpa auto-refresh yang mengganggu
+            st.session_state.input_sku_field = ""
+            st.session_state.input_stok_field = ""
+            st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'."}
+            st.rerun()
+
+    if btn_hapus:
+        if not edit_sku:
+            st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
+            st.rerun()
+        elif edit_rak in st.session_state.rak_gudang_tanpa_posisi:
+            rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
+            filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
+            if len(filtered_rak) < len(rak_lama):
+                st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
                 save_data_to_sheets()
-                st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'."}
+                st.session_state.input_sku_field = ""
+                st.session_state.input_stok_field = ""
+                st.session_state.global_notif = {"tab": "input", "type": "warning", "text": f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!"}
                 st.rerun()
-
-        if btn_hapus:
-            if not edit_sku:
-                st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
-                st.rerun()
-            elif edit_rak in st.session_state.rak_gudang_tanpa_posisi:
-                rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-                filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
-                if len(filtered_rak) < len(rak_lama):
-                    st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
-                    save_data_to_sheets()
-                    st.session_state.global_notif = {"tab": "input", "type": "warning", "text": f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!"}
-                    st.rerun()
-                else:
-                    st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ SKU '{edit_sku}' tidak ditemukan di rak '{edit_rak}'."}
-                    st.rerun()
             else:
-                st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{edit_rak}' tidak ditemukan."}
+                st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ SKU '{edit_sku}' tidak ditemukan di rak '{edit_rak}'."}
                 st.rerun()
+        else:
+            st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{edit_rak}' tidak ditemukan."}
+            st.rerun()
 
 def ui_ambil_barang():
     st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
@@ -556,7 +545,7 @@ else:
             ui_mutasi_barang()
 
 
-# ==================== GLOBAL NOTIFICATION HANDLER ====================
+# ==================== GLOBAL NOTIFICATION HANDLER (TANPA DELAY / INSTAN) ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
