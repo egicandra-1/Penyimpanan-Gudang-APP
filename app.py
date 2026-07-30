@@ -105,7 +105,7 @@ if "mode_aplikasi" not in st.session_state:
 
 def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
-    placeholders["rak"] = st.empty() # Wadah notifikasi Rak
+    placeholders["rak"] = st.empty() 
 
     st.markdown("#### 🗄️ Kelola Rak")
     opsi_rak = ["[+ Tambah Rak Baru]"] + list(st.session_state.rak_gudang_tanpa_posisi.keys())
@@ -147,7 +147,6 @@ def ui_pencarian_visual():
     st.markdown("### 🔍 Pencarian Barang")
     search_query = st.text_input("Masukkan Kode SKU:", placeholder="Contoh: ketik 'mj' atau '459'...", key="main_search_input").strip()
 
-    # Khusus untuk pencarian, hasilnya tidak otomatis hilang (agar bisa dibaca)
     if search_query:
         hasil_cari = []
         for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
@@ -179,7 +178,7 @@ def ui_pencarian_visual():
 
 def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
-    placeholders["input"] = st.empty() # Wadah notifikasi Input
+    placeholders["input"] = st.empty() 
 
     edit_sku = st.text_input("Masukkan Kode SKU:", key="input_sku_field").strip()
     edit_stok_raw = st.text_input("Jumlah Stok:", key="input_stok_field").strip()
@@ -230,7 +229,7 @@ def ui_input_barang():
 
 def ui_ambil_barang():
     st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
-    placeholders["ambil"] = st.empty() # Wadah notifikasi Ambil
+    placeholders["ambil"] = st.empty() 
 
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} 
@@ -417,49 +416,64 @@ def ui_ambil_barang():
 
 def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
-    placeholders["mutasi"] = st.empty() # Wadah notifikasi Mutasi
+    placeholders["mutasi"] = st.empty() 
     
-    with st.form("form_mutasi_direct"):
-        mutasi_sku = st.text_input("Kode SKU yang Dipindah:").strip()
-        mutasi_jumlah = st.text_input("Jumlah Stok (Ketik angka stok untuk memilih item spesifik, cth: 5):", placeholder="Kosongkan jika hanya ada 1 jenis SKU").strip()
-        mutasi_asal = st.text_input("Nama Rak Asal:").strip()
-        tujuan_rak = st.text_input("Nama Rak Tujuan:").strip()
-
-        if st.form_submit_button("Pindah Rak"):
-            if not mutasi_sku or not mutasi_asal or not tujuan_rak:
-                st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ SKU, Rak Asal, dan Rak Tujuan wajib diisi."}
-                st.rerun()
-            elif mutasi_asal not in st.session_state.rak_gudang_tanpa_posisi or tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak Asal / Tujuan tidak valid."}
-                st.rerun()
-            elif mutasi_asal == tujuan_rak:
-                st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak tujuan tidak boleh sama."}
-                st.rerun()
+    # Lepaskan dari form kaku agar UI bisa bereaksi otomatis saat Anda mengetik nama rak & sku
+    mutasi_asal = st.text_input("Nama Rak Asal:", key="mutasi_asal_input").strip()
+    mutasi_sku = st.text_input("Kode SKU yang Dipindah:", key="mutasi_sku_input").strip()
+    
+    item_terpilih = None
+    
+    # Logika Cerdas: Cek ke dalam rak secara real-time
+    if mutasi_asal and mutasi_sku:
+        if mutasi_asal in st.session_state.rak_gudang_tanpa_posisi:
+            items_di_rak = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
+            matching_items = [item for item in items_di_rak if item["sku"].lower() == mutasi_sku.lower()]
+            
+            # Jika ditemukan SKU Kembar, munculkan Dropdown interaktif!
+            if len(matching_items) > 1:
+                opsi_stok = [f"Stok Asal: {item['stok']}" for item in matching_items]
+                pilihan = st.selectbox("⚠️ Ditemukan SKU Kembar! Pilih kelompok mana yang mau dipindah:", opsi_stok, key="mutasi_dropdown_kembar")
+                target_stok = int(pilihan.replace("Stok Asal: ", ""))
+                item_terpilih = next((item for item in matching_items if item["stok"] == target_stok), None)
+                
+            # Jika hanya 1 SKU normal, langsung kunci pilihan otomatis
+            elif len(matching_items) == 1:
+                item_terpilih = matching_items[0]
+                st.info(f"✅ SKU ditemukan! (Satu tumpukan dengan stok: {item_terpilih['stok']}) siap dipindah.")
+                
             else:
-                rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
-                item_ditemukan = None
-                
-                if mutasi_jumlah.isdigit():
-                    target_stok = int(mutasi_jumlah)
-                    item_ditemukan = next((item for item in rak_asal_items if item["sku"].lower() == mutasi_sku.lower() and item["stok"] == target_stok), None)
-                
-                if not item_ditemukan:
-                    item_ditemukan = next((item for item in rak_asal_items if item["sku"].lower() == mutasi_sku.lower()), None)
+                st.error(f"❌ SKU '{mutasi_sku}' tidak ada di rak '{mutasi_asal}'.")
+        else:
+            st.error(f"❌ Rak Asal '{mutasi_asal}' tidak valid atau belum dibuat.")
 
-                if item_ditemukan:
-                    stok_yang_ikut = item_ditemukan["stok"]
-                    sku_asli = item_ditemukan["sku"]
-                    rak_asal_items.remove(item_ditemukan)
-                    st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": sku_asli, "stok": stok_yang_ikut})
-                    save_data_to_sheets()
-                    st.session_state.global_notif = {"tab": "mutasi", "type": "success", "text": f"Berhasil memindah SKU '{sku_asli}' (Stok: {stok_yang_ikut}) ke '{tujuan_rak}'."}
-                    st.rerun()
-                else:
-                    if mutasi_jumlah.isdigit():
-                        st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": f"❌ SKU '{mutasi_sku}' dengan stok '{mutasi_jumlah}' tidak ditemukan di '{mutasi_asal}'."}
-                    else:
-                        st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": f"❌ SKU '{mutasi_sku}' tidak ditemukan di '{mutasi_asal}'."}
-                    st.rerun()
+    tujuan_rak = st.text_input("Nama Rak Tujuan:", key="mutasi_tujuan_input").strip()
+
+    if st.button("🔄 Pindah Rak", use_container_width=True, type="primary"):
+        if not mutasi_sku or not mutasi_asal or not tujuan_rak:
+            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ SKU, Rak Asal, dan Rak Tujuan wajib diisi."}
+            st.rerun()
+        elif tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak Tujuan tidak valid/belum dibuat."}
+            st.rerun()
+        elif mutasi_asal == tujuan_rak:
+            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak tujuan tidak boleh sama dengan rak asal."}
+            st.rerun()
+        elif item_terpilih:
+            # Pindahkan seluruh stok kartu tersebut ke rak baru
+            rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
+            stok_yang_ikut = item_terpilih["stok"]
+            sku_asli = item_terpilih["sku"]
+            
+            rak_asal_items.remove(item_terpilih)
+            st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": sku_asli, "stok": stok_yang_ikut})
+            save_data_to_sheets()
+            
+            st.session_state.global_notif = {"tab": "mutasi", "type": "success", "text": f"Berhasil memindah SKU '{sku_asli}' (Stok: {stok_yang_ikut}) ke '{tujuan_rak}'."}
+            st.rerun()
+        else:
+            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Proses dibatalkan. Pastikan SKU dan Rak Asal sudah benar."}
+            st.rerun()
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
@@ -525,12 +539,10 @@ else:
 
 
 # ==================== GLOBAL NOTIFICATION HANDLER ====================
-# Menangkap dan menampilkan notifikasi yang dibuat oleh fungsi-fungsi di atas
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
     
-    # Render notifikasi di kotak placeholder yang sesuai
     if tab_aktif in placeholders:
         if notif["type"] == "success":
             placeholders[tab_aktif].success(notif["text"])
@@ -539,9 +551,8 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
         elif notif["type"] == "warning":
             placeholders[tab_aktif].warning(notif["text"])
     
-    # Tahan notifikasi selama 2 detik agar bisa dibaca user
+    # Tunggu 2 detik agar notifikasi bisa dibaca, lalu bersihkan layar!
     time.sleep(2)
     
-    # Hapus jejak memori notifikasi dan muat ulang layar menjadi bersih
     st.session_state.global_notif = None
     st.rerun()
