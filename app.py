@@ -3,7 +3,7 @@ import gspread
 import streamlit as st
 import json
 
-st.set_page_config(page_title="Sistem Slotting Rak Sederhana", layout="wide")
+st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
