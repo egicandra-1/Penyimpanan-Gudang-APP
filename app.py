@@ -226,65 +226,42 @@ def ui_input_barang():
             st.rerun()
 
 def ui_ambil_barang():
-    st.markdown("### 📤 Pengurangan Stok (Scan Berulang)")
+    st.markdown("### 📤 Pengurangan Stok")
 
     if "error_ambil_pesan" not in st.session_state:
         st.session_state.error_ambil_pesan = ""
-    if "scan_ambil_sku" not in st.session_state:
-        st.session_state.scan_ambil_sku = ""
-    if "jumlah_scan" not in st.session_state:
-        st.session_state.jumlah_scan = 1
 
     if st.session_state.error_ambil_pesan:
         st.error(st.session_state.error_ambil_pesan)
         st.session_state.error_ambil_pesan = ""
 
-    # Fungsi callback saat discan berulang kali di kotak yang sama
-    def update_scan_count():
-        scanned = st.session_state.ambil_scan_field.strip()
-        if scanned:
-            if scanned == st.session_state.scan_ambil_sku:
-                st.session_state.jumlah_scan += 1
-            else:
-                st.session_state.scan_ambil_sku = scanned
-                st.session_state.jumlah_scan = 1
-
-    # Kotak utama tempat alat scanner menembak barcode
-    sku_input = st.text_input("Scan Kode SKU:", key="ambil_scan_field", on_change=update_scan_count).strip()
+    # Kotak 1 khusus Scan SKU
+    ambil_sku = st.text_input("Scan / Ketik Kode SKU:", key="ambil_sku_field").strip()
     
-    # Menampilkan informasi SKU terakhir dan jumlah yang terakumulasi otomatis
-    if st.session_state.scan_ambil_sku:
-        st.info(f"📦 SKU Terpilih: **{st.session_state.scan_ambil_sku}**\n\n🔢 Jumlah Pengurangan Stok: **{st.session_state.jumlah_scan}**")
-
+    # Kotak 2 khusus Jumlah Pengurangan (bisa diketik angka jumlahnya)
+    ambil_jumlah_raw = st.text_input("Jumlah Pengurangan Stok:", value="1", key="ambil_jumlah_field").strip()
+    
+    # Kotak 3 Rak Asal
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
-    c_a1, c_a2 = st.columns(2)
-    with c_a1:
-        btn_konfirmasi = st.button("Konfirmasi Pengurangan Stok", use_container_width=True, type="primary")
-    with c_a2:
-        if st.button("Reset Hitungan", use_container_width=True):
-            st.session_state.scan_ambil_sku = ""
-            st.session_state.jumlah_scan = 1
-            st.rerun()
+    btn_proses_ambil = st.button("Konfirmasi Pengurangan Stok", use_container_width=True, type="primary")
 
-    if btn_konfirmasi:
-        target_sku = st.session_state.scan_ambil_sku if st.session_state.scan_ambil_sku else sku_input
-        
-        if not target_sku:
-            st.session_state.error_ambil_pesan = "❌ Belum ada SKU yang di-scan!"
+    if btn_proses_ambil:
+        if not ambil_sku:
+            st.session_state.error_ambil_pesan = "❌ Kode SKU harus diisi / di-scan!"
             st.rerun()
-        elif not ambil_rak:
-            st.session_state.error_ambil_pesan = "❌ Nama Rak Asal harus diisi!"
+        elif not ambil_jumlah_raw.isdigit():
+            st.session_state.error_ambil_pesan = "❌ Jumlah pengurangan harus berupa angka!"
             st.rerun()
         elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
             st.session_state.error_ambil_pesan = f"❌ Rak '{ambil_rak}' tidak terdaftar."
             st.rerun()
         else:
-            jumlah_ambil = st.session_state.jumlah_scan
+            jumlah_ambil = int(ambil_jumlah_raw)
             rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
             item_ditemukan = None
             for item in rak_items:
-                if item["sku"].lower() == target_sku.lower():
+                if item["sku"].lower() == ambil_sku.lower():
                     item_ditemukan = item
                     break
 
@@ -293,19 +270,15 @@ def ui_ambil_barang():
                 if jumlah_ambil >= stok_sekarang:
                     rak_items.remove(item_ditemukan)
                     save_data_to_sheets()
-                    st.warning(f"⚠️ Stok habis! SKU '{target_sku}' dihapus dari rak.")
-                    st.session_state.scan_ambil_sku = ""
-                    st.session_state.jumlah_scan = 1
+                    st.warning(f"⚠️ Stok habis! SKU '{ambil_sku}' dihapus dari rak.")
                     st.rerun()
                 else:
                     item_ditemukan["stok"] -= jumlah_ambil
                     save_data_to_sheets()
-                    st.success(f"Berhasil mengurangi {jumlah_ambil} pcs dari SKU '{target_sku}'. Sisa stok: {item_ditemukan['stok']}")
-                    st.session_state.scan_ambil_sku = ""
-                    st.session_state.jumlah_scan = 1
+                    st.success(f"Berhasil mengurangi {jumlah_ambil} pcs dari SKU '{ambil_sku}'. Sisa stok: {item_ditemukan['stok']}")
                     st.rerun()
             else:
-                st.session_state.error_ambil_pesan = f"❌ SKU '{target_sku}' tidak ditemukan di rak '{ambil_rak}'."
+                st.session_state.error_ambil_pesan = f"❌ SKU '{ambil_sku}' tidak ditemukan di rak '{ambil_rak}'."
                 st.rerun()
 
 def ui_mutasi_barang():
@@ -379,7 +352,7 @@ else:
             ui_input_barang()
             st.markdown("---")
             ui_ambil_barang()
-            st.markdown("---")
+            st.markdown---()
             ui_mutasi_barang()
     else:
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "📤 Ambil", "🔄 Mutasi"])
