@@ -228,7 +228,6 @@ def ui_input_barang():
 def ui_ambil_barang():
     st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
 
-    # Inisialisasi State Keranjang
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} # Format: {sku: jumlah}
     if "error_ambil_pesan" not in st.session_state:
@@ -244,10 +243,8 @@ def ui_ambil_barang():
         st.success(st.session_state.success_ambil_pesan)
         st.session_state.success_ambil_pesan = ""
 
-    # KOTAK 1: RAK ASAL
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
-    # Callback ketika Scanner Menembak (Otomatis)
     def process_scanned_sku():
         raw_val = st.session_state.quick_scan_input.strip()
         if not raw_val:
@@ -256,7 +253,7 @@ def ui_ambil_barang():
         rak_terpilih = st.session_state.ambil_rak_field.strip()
         sku_terdeteksi = None
         
-        # Cocokan dengan SKU yang terdaftar di Rak Asal (Jika ada)
+        # Cocokan dengan SKU yang terdaftar di Rak Asal
         if rak_terpilih and rak_terpilih in st.session_state.rak_gudang_tanpa_posisi:
             daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
             for real_sku in daftar_sku_rak:
@@ -264,30 +261,30 @@ def ui_ambil_barang():
                     sku_terdeteksi = real_sku
                     break
         
-        # Jika belum ketemu di rak, jadikan teks pertama sebagai SKU bersih
         if not sku_terdeteksi:
             sku_terdeteksi = raw_val.split()[0] if " " in raw_val else raw_val
-            # Potong jika terlalu panjang dari tumpukan (safety fallback)
             if len(sku_terdeteksi) > 15:
                 sku_terdeteksi = sku_terdeteksi[:5]
 
-        # Hitung jumlah (Bisa mendeteksi tumpukan teks MJ423MJ423)
+        # Hitung kemunculan (jika ter-scan ganda cepat)
         jumlah_scan = 1
         if sku_terdeteksi.lower() in raw_val.lower():
             hitung_kemunculan = raw_val.lower().count(sku_terdeteksi.lower())
             if hitung_kemunculan > 0:
                 jumlah_scan = hitung_kemunculan
 
-        # Tambahkan ke keranjang memori secara instan (+1, +2, dst)
+        # Tambah ke state keranjang
         if sku_terdeteksi in st.session_state.scan_cart:
             st.session_state.scan_cart[sku_terdeteksi] += jumlah_scan
         else:
             st.session_state.scan_cart[sku_terdeteksi] = jumlah_scan
+            
+        # PENTING: Paksa sinkronisasi widget manual agar nilainya tidak me-reset kembali ke 1!
+        st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
         
-        # KOSONGKAN kotak scan agar siap menerima tembakan berikutnya
+        # Kosongkan kotak input scan
         st.session_state.quick_scan_input = ""
 
-    # KOTAK 2: SCAN BARCODE (Tidak ada kotak Jumlah, jadi kursor tidak akan loncat!)
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
         key="quick_scan_input", 
@@ -295,7 +292,6 @@ def ui_ambil_barang():
         placeholder="Arahkan scanner ke barcode..."
     )
 
-    # Menampilkan Daftar Keranjang Scan
     if st.session_state.scan_cart:
         st.markdown("#### 🛒 Daftar Barang yang Akan Dikurangi:")
         total_items = 0
@@ -304,12 +300,19 @@ def ui_ambil_barang():
             with col1:
                 st.write(f"📦 **{sku_item}**")
             with col2:
-                # Menampilkan kuantitas yang otomatis bertambah (dan bisa diketik manual jika butuh ambil banyak sekaligus)
-                new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, value=int(qty), key=f"qty_num_{sku_item}", label_visibility="collapsed")
+                # Perhatikan kita memakai key saja untuk nilainya agar tersinkron otomatis
+                new_qty = st.number_input(
+                    f"Jumlah {sku_item}", 
+                    min_value=1, 
+                    key=f"qty_num_{sku_item}", 
+                    label_visibility="collapsed"
+                )
                 st.session_state.scan_cart[sku_item] = new_qty
             with col3:
                 if st.button("❌", key=f"del_{sku_item}"):
                     del st.session_state.scan_cart[sku_item]
+                    if f"qty_num_{sku_item}" in st.session_state:
+                        del st.session_state[f"qty_num_{sku_item}"]
                     st.rerun()
             total_items += st.session_state.scan_cart[sku_item]
 
@@ -351,11 +354,18 @@ def ui_ambil_barang():
                     if berhasil:
                         save_data_to_sheets()
                         st.session_state.success_ambil_pesan = "Berhasil! " + " | ".join(pesan_hasil)
+                        # Bersihkan session state dari widget
+                        for sku_item in list(st.session_state.scan_cart.keys()):
+                            if f"qty_num_{sku_item}" in st.session_state:
+                                del st.session_state[f"qty_num_{sku_item}"]
                         st.session_state.scan_cart = {}
                         st.rerun()
 
         with c_b2:
             if st.button("🗑️ Reset Daftar", use_container_width=True):
+                for sku_item in list(st.session_state.scan_cart.keys()):
+                    if f"qty_num_{sku_item}" in st.session_state:
+                        del st.session_state[f"qty_num_{sku_item}"]
                 st.session_state.scan_cart = {}
                 st.rerun()
     else:
