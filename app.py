@@ -247,7 +247,7 @@ def ui_ambil_barang():
     scan_sku = st.text_input("Scan Kode SKU:", key="ambil_sku_field", placeholder="Scan barcode disini...").strip()
     jumlah_manual = st.text_input("Jumlah (Opsional, Kosongkan = 1):", key="ambil_jumlah_field", placeholder="Kosongkan jika 1").strip()
 
-    c_ btn1, c_btn2 = st.columns(2)
+    c_btn1, c_btn2 = st.columns(2)
     with c_btn1:
         btn_tambah = st.button("➕ Masukkan ke Daftar", use_container_width=True, type="primary")
     with c_btn2:
@@ -260,10 +260,8 @@ def ui_ambil_barang():
             st.session_state.error_ambil_pesan = "❌ Kode SKU belum di-scan!"
             st.rerun()
         else:
-            # Tentukan jumlah (jika kosong atau bukan angka, bernilai 1)
             qty_tambah = int(jumlah_manual) if jumlah_manual.isdigit() else 1
             
-            # Bersihkan teks jika ada tumpukan scanner
             sku_bersih = scan_sku.split()[0] if " " in scan_sku else scan_sku
             if len(sku_bersih) > 15:
                 sku_bersih = sku_bersih[:5]
@@ -374,7 +372,7 @@ if st.session_state.mode_aplikasi is None:
             
         st.write("") 
         
-        if st.button("📱 BUKA MODE HP", use_container_wood=True if 'wood' in locals() else True, type="primary"):
+        if st.button("📱 BUKA MODE HP", use_container_width=True, type="primary"):
             st.session_state.mode_aplikasi = "hp"
             st.rerun()
 
