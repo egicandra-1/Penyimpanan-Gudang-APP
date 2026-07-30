@@ -178,52 +178,56 @@ def ui_input_barang():
         st.error(st.session_state.error_input_pesan)
         st.session_state.error_input_pesan = ""
 
-    with st.form("form_edit_slot", clear_on_submit=True):
-        edit_sku = st.text_input("Masukkan Kode SKU:").strip()
-        edit_stok_raw = st.text_input("Jumlah Stok:").strip()
-        edit_rak = st.text_input("Ketik Nama Rak Tujuan:").strip()
+    # Menggunakan text_input biasa tanpa st.form agar aman dari auto-submit saat Enter di-scan
+    edit_sku = st.text_input("Masukkan Kode SKU:", key="input_sku_field").strip()
+    edit_stok_raw = st.text_input("Jumlah Stok:", key="input_stok_field").strip()
+    edit_rak = st.text_input("Ketik Nama Rak Tujuan:", key="input_rak_field").strip()
 
-        c_b1, c_b2 = st.columns(2)
-        with c_b1:
-            btn_simpan = st.form_submit_button("Simpan ke Rak")
-        with c_b2:
-            btn_hapus = st.form_submit_button("Hapus SKU")
+    c_b1, c_b2 = st.columns(2)
+    with c_b1:
+        btn_simpan = st.button("Simpan ke Rak", use_container_width=True)
+    with c_b2:
+        btn_hapus = st.button("Hapus SKU", use_container_width=True)
 
-        if btn_simpan and edit_sku:
-            if not edit_stok_raw.isdigit():
-                st.session_state.error_input_pesan = "❌ Stok harus angka!"
-                st.rerun()
-            elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.session_state.error_input_pesan = f"❌ Rak '{edit_rak}' tidak terdaftar."
-                st.rerun()
-            else:
-                edit_stok = int(edit_stok_raw)
-                rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-                
-                # DIUBAH DISINI: Langsung ditambahkan sebagai baris baru (mendukung duplikat SKU di rak yang sama)
-                rak_items.append({"sku": edit_sku, "stok": edit_stok})
-                
+    if btn_simpan:
+        if not edit_sku:
+            st.session_state.error_input_pesan = "❌ Kode SKU harus diisi!"
+            st.rerun()
+        elif not edit_stok_raw.isdigit():
+            st.session_state.error_input_pesan = "❌ Stok harus angka!"
+            st.rerun()
+        elif edit_rak not in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.error_input_pesan = f"❌ Rak '{edit_rak}' tidak terdaftar."
+            st.rerun()
+        else:
+            edit_stok = int(edit_stok_raw)
+            rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
+            
+            rak_items.append({"sku": edit_sku, "stok": edit_stok})
+            
+            save_data_to_sheets()
+            st.success(f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'.")
+            st.rerun()
+
+    if btn_hapus:
+        if not edit_sku:
+            st.session_state.error_input_pesan = "❌ Masukkan Kode SKU yang ingin dihapus!"
+            st.rerun()
+        elif edit_rak in st.session_state.rak_gudang_tanpa_posisi:
+            rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
+            filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
+            
+            if len(filtered_rak) < len(rak_lama):
+                st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
                 save_data_to_sheets()
-                st.success(f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'.")
+                st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
                 st.rerun()
-
-        if btn_hapus and edit_sku:
-            if edit_rak in st.session_state.rak_gudang_tanpa_posisi:
-                # Menghapus SKU yang cocok di rak tersebut (jika ada kembar, menghapus salah satu atau semua yang cocok)
-                rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
-                filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
-                
-                if len(filtered_rak) < len(rak_lama):
-                    st.session_state.rak_gudang_tanpa_posisi[edit_rak] = filtered_rak
-                    save_data_to_sheets()
-                    st.warning(f"SKU '{edit_sku}' dihapus dari '{edit_rak}'!")
-                    st.rerun()
-                else:
-                    st.session_state.error_input_pesan = f"❌ SKU '{edit_sku}' tidak ditemukan di rak '{edit_rak}'."
-                    st.rerun()
             else:
-                st.session_state.error_input_pesan = f"❌ Rak '{edit_rak}' tidak ditemukan."
+                st.session_state.error_input_pesan = f"❌ SKU '{edit_sku}' tidak ditemukan di rak '{edit_rak}'."
                 st.rerun()
+        else:
+            st.session_state.error_input_pesan = f"❌ Rak '{edit_rak}' tidak ditemukan."
+            st.rerun()
 
 def ui_ambil_barang():
     st.markdown("### 📤 Ambil Barang (Kurangi Stok)")
@@ -258,7 +262,7 @@ def ui_ambil_barang():
                         st.success(f"Berhasil ambil {jumlah_ambil} pcs.")
                         st.rerun()
                 else:
-                    st.error(f"❌ SKU tidak ditemukan.")
+                    st.error("❌ SKU tidak ditemukan.")
 
 def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
