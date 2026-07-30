@@ -223,6 +223,10 @@ def ui_input_barang():
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{edit_rak}' tidak terdaftar."}
             st.rerun()
         else:
+            # Kosongkan kolom instan di awal
+            st.session_state.input_sku_field = ""
+            st.session_state.input_stok_field = ""
+            
             edit_stok = int(edit_stok_raw)
             rak_items = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
             rak_items.append({"sku": edit_sku, "stok": edit_stok})
@@ -235,6 +239,9 @@ def ui_input_barang():
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
             st.rerun()
         elif edit_rak in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.input_sku_field = ""
+            st.session_state.input_stok_field = ""
+            
             rak_lama = st.session_state.rak_gudang_tanpa_posisi[edit_rak]
             filtered_rak = [item for item in rak_lama if item["sku"].lower() != edit_sku.lower()]
             if len(filtered_rak) < len(rak_lama):
@@ -259,7 +266,6 @@ def ui_ambil_barang():
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        # Membaca nilai dengan ID statis agar fokus kursor tidak pernah terputus
         raw_val = st.session_state.quick_scan_input.strip()
         if not raw_val:
             return
@@ -279,13 +285,11 @@ def ui_ambil_barang():
         sku_terdeteksi = None
         daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
         
-        # LOGIKA CERDAS BARU: Membaca dari akhir teks untuk mendeteksi scan terbaru (mencegah salah baca bila menumpuk)
         for real_sku in daftar_sku_rak:
             if raw_val.lower().endswith(real_sku.lower()):
                 sku_terdeteksi = real_sku
                 break
         
-        # Fallback jika tidak ditemukan di akhir
         if not sku_terdeteksi:
             for real_sku in daftar_sku_rak:
                 if real_sku.lower() in raw_val.lower():
@@ -298,7 +302,6 @@ def ui_ambil_barang():
             st.session_state.quick_scan_input = ""
             return
 
-        # PENCEGAH BOLA SALJU (SNOWBALL): Sebanyak apapun teks menumpuk, setiap kali scanner berbunyi (Enter), hanya dihitung +1
         jumlah_scan = 1
 
         if sku_terdeteksi in st.session_state.scan_cart:
@@ -307,11 +310,8 @@ def ui_ambil_barang():
             st.session_state.scan_cart[sku_terdeteksi] = jumlah_scan
             
         st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
-        
-        # Kosongkan kotak secara internal (kursor tetap diam di tempat)
         st.session_state.quick_scan_input = ""
 
-    # Menggunakan ID statis kembali
     st.text_input(
         "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
         key="quick_scan_input", 
@@ -564,7 +564,7 @@ else:
             ui_mutasi_barang()
 
 
-# ==================== GLOBAL NOTIFICATION HANDLER ====================
+# ==================== GLOBAL NOTIFICATION HANDLER (TANPA DELAY / INSTAN) ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
@@ -577,8 +577,5 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
         elif notif["type"] == "warning":
             placeholders[tab_aktif].warning(notif["text"])
     
-    # Tunggu 2 detik agar notifikasi bisa dibaca, lalu bersihkan layar!
-    time.sleep(2)
-    
+    # Notifikasi langsung dibersihkan tanpa time.sleep(2) agar tidak menahan dan me-refresh ketikan cepat Anda
     st.session_state.global_notif = None
-    st.rerun()
