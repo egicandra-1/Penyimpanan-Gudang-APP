@@ -226,9 +226,8 @@ def ui_input_barang():
             st.rerun()
 
 def ui_ambil_barang():
-    st.markdown("### 📤 Pengurangan Stok (Mode Scan Cepat)")
+    st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
 
-    # Inisialisasi state keranjang scan barang
     if "scan_cart" not in st.session_state:
         st.session_state.scan_cart = {} # Format: {sku: jumlah}
     if "error_ambil_pesan" not in st.session_state:
@@ -244,55 +243,63 @@ def ui_ambil_barang():
         st.success(st.session_state.success_ambil_pesan)
         st.session_state.success_ambil_pesan = ""
 
-    # Kolom Rak Asal (Diisi sekali di atas)
     ambil_rak = st.text_input("Ketik Nama Rak Asal:", key="ambil_rak_field").strip()
 
     def process_scanned_sku():
-        scanned_val = st.session_state.quick_scan_input.strip()
-        if scanned_val:
-            # Ambil potongan bersih SKU (mengambil kata pertama jika ada teks menumpuk)
-            sku_bersih = scanned_val.split()[0] if " " in scanned_val else scanned_val
-            # Jika ada sisa penumpukan tanpa spasi, ambil 5-8 karakter pertama yang konsisten (misal MJ423)
-            if len(sku_bersih) > 10:
-                sku_bersih = sku_bersih[:5]
-
-            # Tambahkan jumlah ke keranjang scan otomatis (+1 setiap kali discan)
-            if sku_bersih in st.session_state.scan_cart:
-                st.session_state.scan_cart[sku_bersih] += 1
-            else:
-                st.session_state.scan_cart[sku_bersih] = 1
+        raw_val = st.session_state.quick_scan_input.strip()
+        if raw_val:
+            sku_terdeteksi = None
             
-            # Kosongkan kotak input agar siap untuk scan berikutnya
+            # Jika rak asal sudah diisi, kita cocokkan langsung dengan SKU yang ada di rak tersebut
+            if ambil_rak and ambil_rak in st.session_state.rak_gudang_tanpa_posisi:
+                daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[ambil_rak]]
+                # Cari SKU mana yang cocok / ada di dalam teks mentah yang menumpuk dari scanner
+                for real_sku in daftar_sku_rak:
+                    if real_sku.lower() in raw_val.lower():
+                        sku_terdeteksi = real_sku
+                        break
+            
+            # Jika rak belum diisi atau tidak ketemu, ambil potongan pertama teks mentahnya
+            if not sku_terdeteksi:
+                sku_terdeteksi = raw_val.split()[0] if " " in raw_val else raw_val
+
+            # Masukkan ke keranjang dan tambah jumlah 1 pcs otomatis
+            if sku_terdeteksi in st.session_state.scan_cart:
+                st.session_state.scan_cart[sku_terdeteksi] += 1
+            else:
+                st.session_state.scan_cart[sku_terdeteksi] = 1
+            
+            # Bersihkan kotak input secara instan agar siap untuk scan berikutnya
             st.session_state.quick_scan_input = ""
 
-    # Kotak utama tempat alat scanner menembak berulang kali (dilengkapi on_change agar langsung mendeteksi Enter)
     st.text_input(
-        "Scan Kode SKU (Setiap scan otomatis menambah jumlah 1 pcs):", 
+        "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah +1):", 
         key="quick_scan_input", 
         on_change=process_scanned_sku,
         placeholder="Arahkan scanner ke barcode..."
     )
 
-    # Menampilkan daftar item yang sudah di-scan (seperti keranjang kasir di video)
     if st.session_state.scan_cart:
         st.markdown("#### 🛒 Daftar Barang yang Akan Dikurangi:")
         total_items = 0
         for sku_item, qty in list(st.session_state.scan_cart.items()):
-            c_item1, c_item2, c_item3 = st.columns([3, 1, 1])
-            with c_item1:
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
                 st.write(f"📦 **{sku_item}**")
-            with c_item2:
-                st.write(f"Jumlah: **{qty}**")
-            with c_item3:
-                if st.button("❌ Hapus", key=f"del_{sku_item}"):
+            with c2:
+                # Anda tetap bisa mengetik atau mengubah jumlahnya secara manual jika diperlukan
+                new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, value=qty, key=f"qty_num_{sku_item}", label_visibility="collapsed")
+                st.session_state.scan_cart[sku_item] = new_qty
+            with c3:
+                if st.button("❌", key=f"del_{sku_item}"):
                     del st.session_state.scan_cart[sku_item]
                     st.rerun()
-            total_items += qty
+            total_items += st.session_state.scan_cart[sku_item]
 
-        st.markdown(f"**Total Jenis SKU:** {len(st.session_state.scan_cart)} | **Total Keseluruhan Stok yang Dikurangi:** {total_items}")
+        st.markdown(f"**Total Keseluruhan Stok yang Dikurangi:** {total_items} pcs")
 
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
             if st.button("✅ Konfirmasi Pengurangan Stok", use_container_width=True, type="primary"):
                 if not ambil_rak:
                     st.session_state.error_ambil_pesan = "❌ Nama Rak Asal harus diisi!"
@@ -308,7 +315,7 @@ def ui_ambil_barang():
                     for sku_to_reduce, qty_to_reduce in st.session_state.scan_cart.items():
                         item_ditemukan = None
                         for item in rak_items:
-                            if sku_to_reduce.lower() in item["sku"].lower() or item["sku"].lower() in sku_to_reduce.lower():
+                            if sku_to_reduce.lower() == item["sku"].lower():
                                 item_ditemukan = item
                                 break
                         
@@ -327,15 +334,15 @@ def ui_ambil_barang():
                     if berhasil:
                         save_data_to_sheets()
                         st.session_state.success_ambil_pesan = "Berhasil! " + " | ".join(pesan_hasil)
-                        st.session_state.scan_cart = {} # Kosongkan keranjang setelah sukses
+                        st.session_state.scan_cart = {}
                         st.rerun()
 
-        with col_btn2:
+        with col_b2:
             if st.button("🗑️ Reset Keranjang", use_container_width=True):
                 st.session_state.scan_cart = {}
                 st.rerun()
     else:
-        st.info("💡 Belum ada barang yang di-scan. Silakan scan barcode produk Anda secara berurutan.")
+        st.info("💡 Ketik nama rak dulu di atas, lalu scan barcode produk Anda secara berurutan.")
 
 def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
@@ -370,7 +377,7 @@ if st.session_state.mode_aplikasi is None:
     st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
     
-    st.markdown("<br><h3 style='text-align: center;'>Pilih Perangkat Anda:</h3>", unsafe_allow_html=True)
+    st.markdown("<br><h3 style='text-align: center;'>Pilih Perangkat الجهاز Anda (Perangkat):</h3>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
