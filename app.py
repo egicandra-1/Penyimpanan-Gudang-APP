@@ -129,28 +129,12 @@ if "cari_results" not in st.session_state:
 if "focus_target" not in st.session_state:
     st.session_state.focus_target = None
 
-# ==================== CALLBACK TAMBAH RAK (SNOWBALL CATCHER) ====================
+
+# ==================== CALLBACK TAMBAH RAK (KOTAK BAJA / STATIC) ====================
 def on_enter_tambah_rak():
-    raw_val = st.session_state.get("input_rak_baru_scan", "").strip()
-    if not raw_val: return
+    clean_val = st.session_state.input_rak_baru_scan.strip()
+    if not clean_val: return
     
-    last_val = st.session_state.get("tambah_rak_last_val", "")
-    last_time = st.session_state.get("tambah_rak_last_time", 0)
-    now = time.time()
-    
-    clean_val = raw_val
-    # Deteksi scan yang menumpuk (bola salju) karena terlalu cepat
-    if now - last_time < 3.0 and last_val and raw_val.startswith(last_val):
-        clean_val = raw_val[len(last_val):]
-        
-    st.session_state.tambah_rak_last_val = raw_val
-    st.session_state.tambah_rak_last_time = now
-    
-    clean_val = clean_val.strip()
-    if not clean_val:
-        st.session_state.input_rak_baru_scan = ""
-        return
-        
     if clean_val not in st.session_state.rak_gudang_tanpa_posisi:
         st.session_state.rak_gudang_tanpa_posisi[clean_val] = []
         save_data_to_sheets()
@@ -158,7 +142,7 @@ def on_enter_tambah_rak():
     else:
         st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada."}
         
-    st.session_state.input_rak_baru_scan = ""
+    st.session_state.input_rak_baru_scan = "" # Bersihkan tanpa merusak kotak DOM
     st.session_state.focus_target = "Nama Rak Baru:"
 
 # ==================== CALLBACK DATABASE RAK ====================
@@ -204,8 +188,7 @@ def proses_perubahan_tabel_rak():
 
 # ==================== CALLBACK TAB CARI ====================
 def proses_cari():
-    query = st.session_state.get("search_input", "").strip()
-    
+    query = st.session_state.search_input.strip()
     if not query:
         st.session_state.cari_results = None
         return
@@ -230,12 +213,11 @@ def proses_cari():
 
 # ==================== CALLBACK TAB INPUT ====================
 def on_enter_input_barang():
-    sku = st.session_state.get("input_sku_field", "").strip()
-    stok_raw = st.session_state.get("input_stok_field", "").strip()
-    rak = st.session_state.get("input_rak_field", "").strip()
+    sku = st.session_state.input_sku_field.strip()
+    stok_raw = st.session_state.input_stok_field.strip()
+    rak = st.session_state.input_rak_field.strip()
     
-    if not sku and not stok_raw and not rak:
-        return # Abaikan jika tidak sengaja tertekan
+    if not sku and not stok_raw and not rak: return
         
     if not sku or not stok_raw or not rak:
         st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!"}
@@ -262,11 +244,10 @@ def on_enter_input_barang():
 
 # ==================== CALLBACK TAB HAPUS ====================
 def on_enter_hapus_barang():
-    sku_clean = st.session_state.get("hapus_sku_field", "").strip()
-    rak_clean = st.session_state.get("hapus_rak_field", "").strip()
+    sku_clean = st.session_state.hapus_sku_field.strip()
+    rak_clean = st.session_state.hapus_rak_field.strip()
     
-    if not sku_clean and not rak_clean:
-        return # Abaikan jika tidak sengaja tertekan
+    if not sku_clean and not rak_clean: return
         
     if not sku_clean or not rak_clean:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!"}
@@ -288,28 +269,12 @@ def on_enter_hapus_barang():
     else:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan."}
 
-# ==================== CALLBACK TAB AMBIL (SNOWBALL CATCHER) ====================
+# ==================== CALLBACK TAB AMBIL ====================
 def process_scanned_sku():
-    raw_val = st.session_state.get("quick_scan_input", "").strip()
+    raw_val = st.session_state.quick_scan_input.strip()
     if not raw_val: return
 
-    last_val = st.session_state.get("ambil_scan_last_val", "")
-    last_time = st.session_state.get("ambil_scan_last_time", 0)
-    now = time.time()
-    
-    clean_val = raw_val
-    if now - last_time < 3.0 and last_val and raw_val.startswith(last_val):
-        clean_val = raw_val[len(last_val):]
-        
-    st.session_state.ambil_scan_last_val = raw_val
-    st.session_state.ambil_scan_last_time = now
-    
-    clean_val = clean_val.strip()
-    if not clean_val:
-        st.session_state.quick_scan_input = ""
-        return
-
-    rak_terpilih = st.session_state.get("ambil_rak_field", "").strip()
+    rak_terpilih = st.session_state.ambil_rak_field.strip()
     if not rak_terpilih:
         st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
         st.session_state.quick_scan_input = ""
@@ -326,18 +291,18 @@ def process_scanned_sku():
     daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
     
     for real_sku in daftar_sku_rak:
-        if clean_val.lower().endswith(real_sku.lower()):
+        if raw_val.lower().endswith(real_sku.lower()):
             sku_terdeteksi = real_sku
             break
     
     if not sku_terdeteksi:
         for real_sku in daftar_sku_rak:
-            if real_sku.lower() in clean_val.lower():
+            if real_sku.lower() in raw_val.lower():
                 sku_terdeteksi = real_sku
                 break
     
     if not sku_terdeteksi:
-        st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{clean_val}' tidak dikenali di rak '{rak_terpilih}'!"}
+        st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{raw_val}' tidak dikenali di rak '{rak_terpilih}'!"}
         st.session_state.quick_scan_input = ""
         st.session_state.focus_target = "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"
         return
@@ -349,8 +314,7 @@ def process_scanned_sku():
     st.session_state.focus_target = "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"
 
 def proses_konfirmasi_ambil():
-    ambil_rak = st.session_state.get("ambil_rak_field", "").strip()
-    
+    ambil_rak = st.session_state.ambil_rak_field.strip()
     if not ambil_rak:
         st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Nama Rak Asal harus diisi!"}
         return
@@ -403,12 +367,11 @@ def proses_konfirmasi_ambil():
 
 # ==================== CALLBACK TAB MUTASI ====================
 def proses_mutasi():
-    mutasi_asal = st.session_state.get("mutasi_asal", "").strip()
-    mutasi_sku = st.session_state.get("mutasi_sku", "").strip()
-    tujuan_rak = st.session_state.get("mutasi_tujuan", "").strip()
+    mutasi_asal = st.session_state.mutasi_asal.strip()
+    mutasi_sku = st.session_state.mutasi_sku.strip()
+    tujuan_rak = st.session_state.mutasi_tujuan.strip()
     
-    if not mutasi_asal and not mutasi_sku and not tujuan_rak:
-        return
+    if not mutasi_asal and not mutasi_sku and not tujuan_rak: return
         
     if not mutasi_sku or not mutasi_asal or not tujuan_rak:
         st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ SKU, Rak Asal, dan Rak Tujuan wajib diisi."}
@@ -663,10 +626,14 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
-    # --- JAVASCRIPT GLOBAL (KURSOR ANTI GAGAL & BEBAS TERLEMPAR) ---
+    # --- JAVASCRIPT GLOBAL (KURSOR ANTI GAGAL & PENAHAN TAB) ---
     components.html("""
         <script>
         const doc = window.parent.document;
+
+        // Bersihkan memori usang agar tidak bentrok
+        if (doc.gudang_keydown) doc.removeEventListener('keydown', doc.gudang_keydown, true);
+        if (doc.gudang_click) doc.removeEventListener('click', doc.gudang_click, true);
 
         function focusByLabelText(labelText) {
             setTimeout(() => {
@@ -681,46 +648,68 @@ else:
         }
 
         // 1. KONTROL LOMPAT KURSOR SAAT MENEKAN ENTER
-        if (!doc.gudang_keydown_set) {
-            doc.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    const active = doc.activeElement;
-                    if (!active || active.tagName !== 'INPUT') return;
+        doc.gudang_keydown = function(e) {
+            if (e.key === 'Enter') {
+                const active = doc.activeElement;
+                if (!active || active.tagName !== 'INPUT') return;
 
-                    const activeId = active.id;
-                    const labelEl = doc.querySelector('label[for="' + activeId + '"]');
-                    if (!labelEl) return;
+                const activeId = active.id;
+                const labelEl = doc.querySelector('label[for="' + activeId + '"]');
+                if (!labelEl) return;
 
-                    const text = labelEl.innerText.trim();
+                const text = labelEl.innerText.trim();
 
-                    if (text === 'Masukkan Kode SKU:') focusByLabelText('Jumlah Stok:');
-                    else if (text === 'Jumlah Stok:') focusByLabelText('Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):');
-                    else if (text === 'Masukkan Kode SKU yang akan dihapus:') focusByLabelText('Ketik Nama Rak Asal (Enter untuk Hapus Cepat):');
-                    else if (text === 'Ketik Nama Rak Asal:') focusByLabelText('Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):');
-                    else if (text === 'Konfirmasi Eksekusi (Enter di sini):') focusByLabelText('Ketik Nama Rak Asal:');
-                    else if (text === 'Nama Rak Asal:') focusByLabelText('Kode SKU yang Dipindah:');
-                    else if (text === 'Kode SKU yang Dipindah:') focusByLabelText('Nama Rak Tujuan (Enter untuk Pindah):');
+                if (text === 'Masukkan Kode SKU:') focusByLabelText('Jumlah Stok:');
+                else if (text === 'Jumlah Stok:') focusByLabelText('Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):');
+                else if (text === 'Masukkan Kode SKU yang akan dihapus:') focusByLabelText('Ketik Nama Rak Asal (Enter untuk Hapus Cepat):');
+                else if (text === 'Ketik Nama Rak Asal:') focusByLabelText('Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):');
+                else if (text === 'Konfirmasi Eksekusi (Enter di sini):') focusByLabelText('Ketik Nama Rak Asal:');
+                else if (text === 'Nama Rak Asal:') focusByLabelText('Kode SKU yang Dipindah:');
+                else if (text === 'Kode SKU yang Dipindah:') focusByLabelText('Nama Rak Tujuan (Enter untuk Pindah):');
+            }
+        };
+
+        // 2. KONTROL MEMORI TAB & FOKUS SAAT TAB DIKLIK
+        doc.gudang_click = function(e) {
+            let tabBtn = e.target.closest('[role="tab"]');
+            if (tabBtn) {
+                // Simpan indeks tab ke memori HP
+                let tabs = Array.from(doc.querySelectorAll('[role="tab"]'));
+                let idx = tabs.indexOf(tabBtn);
+                if (idx !== -1) sessionStorage.setItem('gudangActiveTab', idx);
+
+                // Langsung aktifkan kursor
+                const tabText = tabBtn.innerText.trim();
+                if (tabText.includes('Rak')) focusByLabelText('Nama Rak Baru:');
+                else if (tabText.includes('Cari')) focusByLabelText('Masukkan Kode SKU atau Nama Rak:');
+                else if (tabText.includes('Input')) focusByLabelText('Masukkan Kode SKU:');
+                else if (tabText.includes('Hapus')) focusByLabelText('Masukkan Kode SKU yang akan dihapus:');
+                else if (tabText.includes('Ambil')) focusByLabelText('Ketik Nama Rak Asal:');
+                else if (tabText.includes('Mutasi')) focusByLabelText('Nama Rak Asal:');
+            }
+        };
+
+        doc.addEventListener('keydown', doc.gudang_keydown, true);
+        doc.addEventListener('click', doc.gudang_click, true);
+
+        // 3. PEMULIHAN TAB SAAT BROWSER REFRESH / SCAN CEPAT
+        function restoreTab() {
+            let savedTabIdx = sessionStorage.getItem('gudangActiveTab');
+            if (savedTabIdx !== null) {
+                let tabs = Array.from(doc.querySelectorAll('[role="tab"]'));
+                if (tabs.length > savedTabIdx) {
+                    if (tabs[savedTabIdx].getAttribute('aria-selected') !== 'true') {
+                        tabs[savedTabIdx].click();
+                    }
                 }
-            }, true);
-            doc.gudang_keydown_set = true;
+            }
         }
-
-        // 2. KONTROL FOKUS KURSOR SAAT TAB DIKLIK
-        if (!doc.gudang_click_set) {
-            doc.addEventListener('click', function(e) {
-                let tabBtn = e.target.closest('[role="tab"]');
-                if (tabBtn) {
-                    const tabText = tabBtn.innerText.trim();
-                    if (tabText.includes('Rak')) focusByLabelText('Nama Rak Baru:');
-                    else if (tabText.includes('Cari')) focusByLabelText('Masukkan Kode SKU atau Nama Rak:');
-                    else if (tabText.includes('Input')) focusByLabelText('Masukkan Kode SKU:');
-                    else if (tabText.includes('Hapus')) focusByLabelText('Masukkan Kode SKU yang akan dihapus:');
-                    else if (tabText.includes('Ambil')) focusByLabelText('Ketik Nama Rak Asal:');
-                    else if (tabText.includes('Mutasi')) focusByLabelText('Nama Rak Asal:');
-                }
-            }, true);
-            doc.gudang_click_set = true;
-        }
+        
+        // Panggil beberapa kali untuk memastikan menangkap momen Streamlit selesai loading
+        setTimeout(restoreTab, 50);
+        setTimeout(restoreTab, 300);
+        setTimeout(restoreTab, 800);
+        
         </script>
     """, height=0, width=0)
 
