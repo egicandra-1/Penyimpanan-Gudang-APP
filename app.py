@@ -99,7 +99,6 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
-# Inisialisasi counter versi untuk reset instan widget input tanpa error API
 if "input_version" not in st.session_state:
     st.session_state.input_version = 0
 
@@ -110,40 +109,65 @@ def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
     placeholders["rak"] = st.empty() 
 
-    st.markdown("#### 🗄️ Kelola Rak")
-    opsi_rak = ["[+ Tambah Rak Baru]"] + list(st.session_state.rak_gudang_tanpa_posisi.keys())
-    rak_terpilih_mgt = st.selectbox("Pilih Tindakan / Nama Rak:", opsi_rak, key="rak_action_select")
-
-    if rak_terpilih_mgt == "[+ Tambah Rak Baru]":
-        with st.form("tambah_rak_menyatu", clear_on_submit=True):
-            t_rak = st.text_input("Nama Rak Baru:").strip()
-            if st.form_submit_button("Tambah Rak") and t_rak:
-                if t_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                    st.session_state.rak_gudang_tanpa_posisi[t_rak] = []
-                    save_data_to_sheets()
-                    st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Rak '{t_rak}' berhasil ditambahkan!"}
-                    st.rerun()
-                else:
-                    st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
-                    st.rerun()
-    else:
-        nama_rak_baru = st.text_input(f"Ubah Nama '{rak_terpilih_mgt}' Menjadi:", key="edit_rak_name_input").strip()
-        c_r1, c_r2 = st.columns(2)
-        with c_r1:
-            if st.button("Ubah Nama Rak") and nama_rak_baru:
-                if nama_rak_baru not in st.session_state.rak_gudang_tanpa_posisi:
-                    st.session_state.rak_gudang_tanpa_posisi[nama_rak_baru] = st.session_state.rak_gudang_tanpa_posisi.pop(rak_terpilih_mgt)
-                    save_data_to_sheets()
-                    st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Nama rak berhasil diubah menjadi '{nama_rak_baru}'!"}
-                    st.rerun()
-                else:
-                    st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
-                    st.rerun()
-        with c_r2:
-            if st.button(f"🗑️ Hapus {rak_terpilih_mgt}"):
-                st.session_state.rak_gudang_tanpa_posisi.pop(rak_terpilih_mgt)
+    # --- BAGIAN 1: TAMBAH RAK BARU ---
+    st.markdown("#### ➕ Tambah Rak Baru")
+    with st.form("tambah_rak_menyatu", clear_on_submit=True):
+        t_rak = st.text_input("Nama Rak Baru:").strip()
+        if st.form_submit_button("Tambah Rak") and t_rak:
+            if t_rak not in st.session_state.rak_gudang_tanpa_posisi:
+                st.session_state.rak_gudang_tanpa_posisi[t_rak] = []
                 save_data_to_sheets()
-                st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"Rak '{rak_terpilih_mgt}' berhasil dihapus!"}
+                st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Rak '{t_rak}' berhasil ditambahkan!"}
+                st.rerun()
+            else:
+                st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
+                st.rerun()
+
+    st.markdown("---")
+    
+    # --- BAGIAN 2: EDIT / HAPUS RAK DENGAN CHECKBOX ---
+    st.markdown("#### 🗄️ Edit / Hapus Rak")
+    st.caption("Centang rak di bawah ini untuk mengubah nama atau menghapusnya.")
+    
+    if not st.session_state.rak_gudang_tanpa_posisi:
+        st.info("Belum ada rak yang terdaftar.")
+    else:
+        rak_terpilih = []
+        for r_nama in st.session_state.rak_gudang_tanpa_posisi.keys():
+            # Jika checkbox dicentang, masukkan nama rak ke dalam list rak_terpilih
+            if st.checkbox(f"📁 Rak: {r_nama}", key=f"chk_{r_nama}"):
+                rak_terpilih.append(r_nama)
+                
+        # Jika hanya 1 rak yang dicentang (Bisa Edit & Hapus)
+        if len(rak_terpilih) == 1:
+            rak_target = rak_terpilih[0]
+            nama_rak_baru = st.text_input(f"Ubah Nama '{rak_target}' Menjadi:", key="edit_rak_name_input").strip()
+            c_r1, c_r2 = st.columns(2)
+            with c_r1:
+                if st.button("Ubah Nama Rak", use_container_width=True) and nama_rak_baru:
+                    if nama_rak_baru not in st.session_state.rak_gudang_tanpa_posisi:
+                        st.session_state.rak_gudang_tanpa_posisi[nama_rak_baru] = st.session_state.rak_gudang_tanpa_posisi.pop(rak_target)
+                        save_data_to_sheets()
+                        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Nama rak berhasil diubah menjadi '{nama_rak_baru}'!"}
+                        st.rerun()
+                    else:
+                        st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
+                        st.rerun()
+            with c_r2:
+                if st.button(f"🗑️ Hapus Rak", use_container_width=True):
+                    st.session_state.rak_gudang_tanpa_posisi.pop(rak_target)
+                    save_data_to_sheets()
+                    st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"Rak '{rak_target}' berhasil dihapus!"}
+                    st.rerun()
+                    
+        # Jika lebih dari 1 rak yang dicentang (Hanya Bisa Hapus Masal)
+        elif len(rak_terpilih) > 1:
+            st.warning("⚠️ Anda mencentang lebih dari 1 rak. Fitur ubah nama dinonaktifkan, namun Anda bisa menghapus semuanya sekaligus.")
+            if st.button(f"🗑️ Hapus {len(rak_terpilih)} Rak Terpilih", use_container_width=True):
+                for r in rak_terpilih:
+                    st.session_state.rak_gudang_tanpa_posisi.pop(r)
+                save_data_to_sheets()
+                st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"{len(rak_terpilih)} rak berhasil dihapus sekaligus!"}
                 st.rerun()
 
 def ui_pencarian_visual():
@@ -187,7 +211,6 @@ def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     placeholders["input"] = st.empty() 
 
-    # Menggunakan dynamic key berdasarkan input_version agar kolom otomatis reset bersih instan tanpa error API
     v = st.session_state.input_version
     edit_sku = st.text_input("Masukkan Kode SKU:", key=f"input_sku_field_{v}").strip()
     edit_stok_raw = st.text_input("Jumlah Stok:", key=f"input_stok_field_{v}").strip()
@@ -215,7 +238,6 @@ def ui_input_barang():
             rak_items.append({"sku": edit_sku, "stok": edit_stok})
             save_data_to_sheets()
             
-            # Reset versi input agar kolom langsung bersih instan tanpa error
             st.session_state.input_version += 1
             st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"SKU '{edit_sku}' (Stok: {edit_stok}) berhasil ditambahkan ke '{edit_rak}'."}
             st.rerun()
