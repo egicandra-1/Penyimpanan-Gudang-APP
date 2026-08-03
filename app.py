@@ -3,6 +3,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
 import json
+import streamlit.components.v1 as components  # Komponen baru untuk memindahkan kursor otomatis
 
 st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
 
@@ -101,11 +102,9 @@ def save_data_to_sheets():
             break
         except Exception:
             if attempt < max_retries - 1:
-                time.sleep(1.0) # Jeda sejenak jika server Google kepanasan
+                time.sleep(1.0) 
             else:
-                # Gagal diam-diam (Silent Fail). Data lokal sudah aman, 
-                # akan terkirim otomatis di scan berikutnya tanpa menampilkan error merah!
-                pass
+                pass 
 
 if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
@@ -113,6 +112,8 @@ if "rak_gudang_tanpa_posisi" not in st.session_state:
 if "mode_aplikasi" not in st.session_state:
     st.session_state.mode_aplikasi = None
 
+if "input_version" not in st.session_state:
+    st.session_state.input_version = 0
 
 # ==================== CALLBACK TAMBAH RAK (ANTI TUMPANG TINDIH) ====================
 def on_enter_tambah_rak():
@@ -122,16 +123,13 @@ def on_enter_tambah_rak():
     now = time.time()
     clean_val = raw_val
     
-    # 1. PERISAI ANTI-BOLA SALJU (SNOWBALL PREVENTION)
     if "last_raw_tambah_rak" in st.session_state and "last_raw_tambah_rak_time" in st.session_state:
         prev_raw = st.session_state.last_raw_tambah_rak
         prev_time = st.session_state.last_raw_tambah_rak_time
         
-        # Jika rentang waktu scan sangat cepat (browser lag)
         if now - prev_time < 3.0:
             if prev_raw and raw_val.startswith(prev_raw):
                 potential_clean = raw_val[len(prev_raw):].strip()
-                # Jika hasil potongannya valid (minimal 2 karakter), kita ambil!
                 if len(potential_clean) >= 2:
                     clean_val = potential_clean
 
@@ -142,7 +140,6 @@ def on_enter_tambah_rak():
         st.session_state.input_rak_baru_scan = ""
         return
         
-    # Eksekusi simpan
     if clean_val not in st.session_state.rak_gudang_tanpa_posisi:
         st.session_state.rak_gudang_tanpa_posisi[clean_val] = []
         save_data_to_sheets()
@@ -150,7 +147,6 @@ def on_enter_tambah_rak():
     else:
         st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada."}
         
-    # 2. CLEAR INSTAN TANPA DELAY
     st.session_state.input_rak_baru_scan = ""
 
 # ==================== CALLBACK DATABASE RAK ====================
@@ -194,11 +190,12 @@ def proses_perubahan_tabel_rak():
         save_data_to_sheets()
         st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!"}
 
-# ==================== CALLBACK TAB INPUT ====================
+# ==================== CALLBACK TAB INPUT BARU ====================
 def on_enter_input_barang():
-    sku = st.session_state.input_sku_field.strip()
-    stok_raw = st.session_state.input_stok_field.strip()
-    rak = st.session_state.input_rak_field.strip()
+    v = st.session_state.input_version
+    sku = st.session_state.get(f"input_sku_field_{v}", "").strip()
+    stok_raw = st.session_state.get(f"input_stok_field_{v}", "").strip()
+    rak = st.session_state.get(f"input_rak_field_{v}", "").strip()
     
     if not sku or not stok_raw or not rak:
         st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!"}
@@ -218,14 +215,14 @@ def on_enter_input_barang():
     
     st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
     
-    # Kosongkan kolom secara instan
-    st.session_state.input_sku_field = ""
-    st.session_state.input_stok_field = ""
-    st.session_state.input_rak_field = ""
+    # Refresh kotak dan set sinyal agar kursor lompat ke SKU kembali
+    st.session_state.input_version += 1
+    st.session_state.focus_sku_after_save = True
 
 def btn_hapus_input_click():
-    sku_clean = st.session_state.input_sku_field.strip()
-    rak_clean = st.session_state.input_rak_field.strip()
+    v = st.session_state.input_version
+    sku_clean = st.session_state.get(f"input_sku_field_{v}", "").strip()
+    rak_clean = st.session_state.get(f"input_rak_field_{v}", "").strip()
     
     if not sku_clean:
         st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
@@ -239,9 +236,8 @@ def btn_hapus_input_click():
             save_data_to_sheets()
             st.session_state.global_notif = {"tab": "input", "type": "warning", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!"}
             
-            st.session_state.input_sku_field = ""
-            st.session_state.input_stok_field = ""
-            st.session_state.input_rak_field = ""
+            st.session_state.input_version += 1
+            st.session_state.focus_sku_after_save = True
         else:
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'."}
     else:
@@ -255,7 +251,6 @@ def ui_manajemen_rak():
 
     st.markdown("#### ➕ Tambah Rak Baru")
     
-    # Form khusus scanner - Tekan Enter langsung jalan!
     st.text_input(
         "Nama Rak Baru:", 
         key="input_rak_baru_scan", 
@@ -334,13 +329,28 @@ def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     placeholders["input"] = st.empty() 
 
-    st.text_input("Masukkan Kode SKU:", key="input_sku_field")
-    st.text_input("Jumlah Stok:", key="input_stok_field")
+    v = st.session_state.input_version
     
-    # Cukup tekan Enter di bagian nama rak, otomatis tersimpan instan!
+    # LOGIKA PENDETEKSI KURSOR (AUTO FOCUS JUMPING)
+    sku_val = st.session_state.get(f"input_sku_field_{v}", "").strip()
+    stok_val = st.session_state.get(f"input_stok_field_{v}", "").strip()
+    rak_val = st.session_state.get(f"input_rak_field_{v}", "").strip()
+    
+    target_focus = None
+    if st.session_state.get("focus_sku_after_save", False):
+        target_focus = "Masukkan Kode SKU:"
+        st.session_state.focus_sku_after_save = False # Reset flag
+    elif sku_val and not stok_val:
+        target_focus = "Jumlah Stok:"
+    elif sku_val and stok_val and not rak_val:
+        target_focus = "Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):"
+
+    # WIDGET INPUT
+    st.text_input("Masukkan Kode SKU:", key=f"input_sku_field_{v}")
+    st.text_input("Jumlah Stok:", key=f"input_stok_field_{v}")
     st.text_input(
         "Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):", 
-        key="input_rak_field", 
+        key=f"input_rak_field_{v}", 
         on_change=on_enter_input_barang
     )
 
@@ -349,6 +359,25 @@ def ui_input_barang():
         st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
     with c_b2:
         st.button("Hapus SKU", use_container_width=True, on_click=btn_hapus_input_click)
+
+    # SUNTIKAN JAVASCRIPT UNTUK MEMINDAHKAN KURSOR SECARA INSTAN
+    if target_focus:
+        components.html(f"""
+            <script>
+            const doc = window.parent.document;
+            function tryFocus(label, attempts) {{
+                if (attempts <= 0) return;
+                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
+                if (inputToFocus) {{
+                    setTimeout(() => inputToFocus.focus(), 50);
+                }} else {{
+                    setTimeout(() => tryFocus(label, attempts - 1), 100);
+                }}
+            }}
+            tryFocus('{target_focus}', 15);
+            </script>
+        """, height=0, width=0)
 
 def ui_ambil_barang():
     st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
