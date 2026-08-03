@@ -657,7 +657,7 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
-    # --- SUNTIKAN JAVASCRIPT GLOBAL UNTUK LOMPAT KURSOR SUPER INSTAN (0 DETIK) ---
+    # --- SUNTIKAN JAVASCRIPT GLOBAL UNTUK KELOMPATAN KURSOR (TERMASUK AMBIL & MUTASI) ---
     components.html("""
         <script>
         const doc = window.parent.document;
@@ -690,10 +690,24 @@ else:
                                 if (next) next.focus();
                             }, 50);
                         }
+                        // --- TAMBAHAN KELOMPATAN ENTER: TAB AMBIL ---
+                        else if (label === 'Ketik Nama Rak Asal:') {
+                            setTimeout(() => {
+                                const next = document.querySelector('input[aria-label="Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"]');
+                                if (next) next.focus();
+                            }, 50);
+                        }
+                        // --- TAMBAHAN KELOMPATAN ENTER: TAB MUTASI ---
+                        else if (label === 'Nama Rak Asal:') {
+                            setTimeout(() => {
+                                const next = document.querySelector('input[aria-label="Kode SKU yang Dipindah:"]');
+                                if (next) next.focus();
+                            }, 50);
+                        }
                     }
                 }, true);
 
-                // --- TAMBAHAN BARU: LOMPAT KURSOR OTOMATIS SAAT PINDAH TAB ---
+                // --- LOMPAT KURSOR OTOMATIS SAAT PINDAH TAB ---
                 document.addEventListener('click', function(e) {
                     const tabNode = e.target.closest('button[data-baseweb="tab"]') || e.target.closest('[role="tab"]');
                     if (tabNode) {
@@ -712,7 +726,7 @@ else:
         </script>
     """, height=0, width=0)
 
-    # --- KEMBALI KE STRUKTUR ASLI [4, 1] TANPA MERUSAK LAYOUT UTAMA ---
+    # --- STRUKTUR UTAMA TETAP 100% PERSIS SEPERTI SEMULA ---
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
@@ -726,7 +740,7 @@ else:
             
     st.divider()
 
-    # --- TOMBOL SINKRONISASI DI SIDEBAR (AGAR TAMPILAN UTAMA 100% UTUH) ---
+    # --- TOMBOL SINKRONISASI DI SIDEBAR ---
     with st.sidebar:
         st.markdown("### ⚙️ Kontrol Sistem")
         if st.button("🔁 Sinkronisasi Data", use_container_width=True, type="primary"):
