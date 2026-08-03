@@ -1,9 +1,11 @@
 import time
+import threading
+import copy
 from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
 import json
-import streamlit.components.v1 as components  # Komponen baru untuk memindahkan kursor otomatis
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
 
@@ -78,33 +80,44 @@ def load_data_from_sheets():
             struktur[r_nama].append({"sku": str(sku), "stok": int(stok) if str(stok).isdigit() else 0})
     return struktur
 
-# ==================== OPTIMASI PENYIMPANAN & PERISAI LIMIT GOOGLE ====================
-def save_data_to_sheets():
-    data_rak = [["nama_rak"]]
-    data_isi = [["nama_rak", "sku", "stok"]]
-    
-    for r_nama, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
-        data_rak.append([r_nama])
-        for item in daftar_item:
-            data_isi.append([r_nama, item["sku"], item["stok"]])
-            
-    max_retries = 2
-    for attempt in range(max_retries):
-        try:
-            sheet_rak.clear()
-            sheet_isi.clear()
+# ==================== PENYIMPANAN SILUMAN (LOADING NOL DETIK) ====================
+save_lock = threading.Lock()
+
+def _background_save(data_dict):
+    with save_lock:
+        data_rak = [["nama_rak"]]
+        data_isi = [["nama_rak", "sku", "stok"]]
+        
+        for r_nama, daftar_item in data_dict.items():
+            data_rak.append([r_nama])
+            for item in daftar_item:
+                data_isi.append([r_nama, item["sku"], item["stok"]])
+                
+        max_retries = 2
+        for attempt in range(max_retries):
             try:
-                sheet_rak.update(values=data_rak, range_name="A1")
-                sheet_isi.update(values=data_isi, range_name="A1")
-            except TypeError:
-                sheet_rak.update("A1", data_rak)
-                sheet_isi.update("A1", data_isi)
-            break
-        except Exception:
-            if attempt < max_retries - 1:
-                time.sleep(1.0) 
-            else:
-                pass 
+                sheet_rak.clear()
+                sheet_isi.clear()
+                try:
+                    sheet_rak.update(values=data_rak, range_name="A1")
+                    sheet_isi.update(values=data_isi, range_name="A1")
+                except TypeError:
+                    sheet_rak.update("A1", data_rak)
+                    sheet_isi.update("A1", data_isi)
+                break
+            except Exception:
+                if attempt < max_retries - 1:
+                    time.sleep(1.0)
+                else:
+                    pass
+
+def save_data_to_sheets():
+    # Membuat kembaran data untuk dikirim ke robot belakang layar
+    current_data = copy.deepcopy(st.session_state.rak_gudang_tanpa_posisi)
+    # Meluncurkan robot penyimpan agar UI aplikasi tidak tertahan (loading 0 detik)
+    threading.Thread(target=_background_save, args=(current_data,)).start()
+
+# =================================================================================
 
 if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
@@ -190,7 +203,7 @@ def proses_perubahan_tabel_rak():
         save_data_to_sheets()
         st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!"}
 
-# ==================== CALLBACK TAB INPUT BARU ====================
+# ==================== CALLBACK TAB INPUT ====================
 def on_enter_input_barang():
     v = st.session_state.input_version
     sku = st.session_state.get(f"input_sku_field_{v}", "").strip()
@@ -211,6 +224,8 @@ def on_enter_input_barang():
         
     stok = int(stok_raw)
     st.session_state.rak_gudang_tanpa_posisi[rak].append({"sku": sku, "stok": stok})
+    
+    # Save seketika via robot siluman
     save_data_to_sheets()
     
     st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
@@ -219,13 +234,14 @@ def on_enter_input_barang():
     st.session_state.input_version += 1
     st.session_state.focus_sku_after_save = True
 
-def btn_hapus_input_click():
+# ==================== CALLBACK TAB HAPUS ====================
+def on_enter_hapus_barang():
     v = st.session_state.input_version
-    sku_clean = st.session_state.get(f"input_sku_field_{v}", "").strip()
-    rak_clean = st.session_state.get(f"input_rak_field_{v}", "").strip()
+    sku_clean = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
+    rak_clean = st.session_state.get(f"hapus_rak_field_{v}", "").strip()
     
-    if not sku_clean:
-        st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
+    if not sku_clean or not rak_clean:
+        st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!"}
         return
         
     if rak_clean in st.session_state.rak_gudang_tanpa_posisi:
@@ -234,14 +250,14 @@ def btn_hapus_input_click():
         if len(filtered_rak) < len(rak_lama):
             st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
             save_data_to_sheets()
-            st.session_state.global_notif = {"tab": "input", "type": "warning", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!"}
+            st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!"}
             
             st.session_state.input_version += 1
-            st.session_state.focus_sku_after_save = True
+            st.session_state.focus_hapus_sku_after_save = True
         else:
-            st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'."}
+            st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'."}
     else:
-        st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan."}
+        st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan."}
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
@@ -331,7 +347,7 @@ def ui_input_barang():
 
     v = st.session_state.input_version
     
-    # LOGIKA PENDETEKSI KURSOR (AUTO FOCUS JUMPING)
+    # LOGIKA PENDETEKSI KURSOR (AUTO FOCUS JUMPING) KHUSUS INPUT
     sku_val = st.session_state.get(f"input_sku_field_{v}", "").strip()
     stok_val = st.session_state.get(f"input_stok_field_{v}", "").strip()
     rak_val = st.session_state.get(f"input_rak_field_{v}", "").strip()
@@ -354,13 +370,55 @@ def ui_input_barang():
         on_change=on_enter_input_barang
     )
 
-    c_b1, c_b2 = st.columns(2)
-    with c_b1:
-        st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
-    with c_b2:
-        st.button("Hapus SKU", use_container_width=True, on_click=btn_hapus_input_click)
+    st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
 
     # SUNTIKAN JAVASCRIPT UNTUK MEMINDAHKAN KURSOR SECARA INSTAN
+    if target_focus:
+        components.html(f"""
+            <script>
+            const doc = window.parent.document;
+            function tryFocus(label, attempts) {{
+                if (attempts <= 0) return;
+                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
+                if (inputToFocus) {{
+                    setTimeout(() => inputToFocus.focus(), 50);
+                }} else {{
+                    setTimeout(() => tryFocus(label, attempts - 1), 100);
+                }}
+            }}
+            tryFocus('{target_focus}', 15);
+            </script>
+        """, height=0, width=0)
+
+def ui_hapus_barang():
+    st.markdown("### ❌ Hapus Barang dari Rak")
+    placeholders["hapus"] = st.empty() 
+
+    v = st.session_state.input_version
+    
+    # LOGIKA PENDETEKSI KURSOR KHUSUS HAPUS
+    sku_val = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
+    rak_val = st.session_state.get(f"hapus_rak_field_{v}", "").strip()
+    
+    target_focus = None
+    if st.session_state.get("focus_hapus_sku_after_save", False):
+        target_focus = "Masukkan Kode SKU yang akan dihapus:"
+        st.session_state.focus_hapus_sku_after_save = False # Reset flag
+    elif sku_val and not rak_val:
+        target_focus = "Ketik Nama Rak Asal (Enter untuk Hapus Cepat):"
+
+    # WIDGET HAPUS
+    st.text_input("Masukkan Kode SKU yang akan dihapus:", key=f"hapus_sku_field_{v}")
+    st.text_input(
+        "Ketik Nama Rak Asal (Enter untuk Hapus Cepat):", 
+        key=f"hapus_rak_field_{v}", 
+        on_change=on_enter_hapus_barang
+    )
+
+    st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
+
+    # JAVASCRIPT KURSOR
     if target_focus:
         components.html(f"""
             <script>
@@ -666,13 +724,17 @@ else:
         with col_tengah:
             ui_pencarian_visual()
         with col_kanan:
+            # Di komputer, Input dan Hapus digabung di kolom kanan secara vertikal
             ui_input_barang()
+            st.markdown("---")
+            ui_hapus_barang()
             st.markdown("---")
             ui_ambil_barang()
             st.markdown("---")
             ui_mutasi_barang()
     else:
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "📤 Ambil", "🔄 Mutasi"])
+        # Di HP, dipisah menjadi tab-tab berbeda
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "❌ Hapus", "📤 Ambil", "🔄 Mutasi"])
         
         with tab1:
             ui_manajemen_rak()
@@ -681,8 +743,10 @@ else:
         with tab3:
             ui_input_barang()
         with tab4:
-            ui_ambil_barang()
+            ui_hapus_barang()
         with tab5:
+            ui_ambil_barang()
+        with tab6:
             ui_mutasi_barang()
 
 
