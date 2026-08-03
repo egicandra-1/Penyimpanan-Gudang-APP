@@ -112,9 +112,7 @@ def _background_save(data_dict):
                     pass
 
 def save_data_to_sheets():
-    # Membuat kembaran data untuk dikirim ke robot belakang layar
     current_data = copy.deepcopy(st.session_state.rak_gudang_tanpa_posisi)
-    # Meluncurkan robot penyimpan agar UI aplikasi tidak tertahan (loading 0 detik)
     threading.Thread(target=_background_save, args=(current_data,)).start()
 
 # =================================================================================
@@ -230,7 +228,7 @@ def on_enter_input_barang():
     
     st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
     
-    # Refresh kotak dan set sinyal agar kursor lompat ke SKU kembali
+    # Refresh kotak dan lempar kursor kembali ke SKU awal
     st.session_state.input_version += 1
     st.session_state.focus_sku_after_save = True
 
@@ -266,7 +264,6 @@ def ui_manajemen_rak():
     placeholders["rak"] = st.empty() 
 
     st.markdown("#### ➕ Tambah Rak Baru")
-    
     st.text_input(
         "Nama Rak Baru:", 
         key="input_rak_baru_scan", 
@@ -276,7 +273,6 @@ def ui_manajemen_rak():
     st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak)
 
     st.markdown("---")
-    
     st.markdown("#### 📋 Database Rak")
     st.caption("💡 **Tips:** Untuk mengubah nama, klik 2x pada nama rak di tabel lalu tekan **Enter**. Untuk menghapus, centang kotak di sisi paling kiri lalu tekan **Delete** di keyboard atau klik ikon tong sampah di kanan atas tabel.")
     
@@ -347,21 +343,11 @@ def ui_input_barang():
 
     v = st.session_state.input_version
     
-    # LOGIKA PENDETEKSI KURSOR (AUTO FOCUS JUMPING) KHUSUS INPUT
-    sku_val = st.session_state.get(f"input_sku_field_{v}", "").strip()
-    stok_val = st.session_state.get(f"input_stok_field_{v}", "").strip()
-    rak_val = st.session_state.get(f"input_rak_field_{v}", "").strip()
-    
     target_focus = None
     if st.session_state.get("focus_sku_after_save", False):
         target_focus = "Masukkan Kode SKU:"
-        st.session_state.focus_sku_after_save = False # Reset flag
-    elif sku_val and not stok_val:
-        target_focus = "Jumlah Stok:"
-    elif sku_val and stok_val and not rak_val:
-        target_focus = "Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):"
+        st.session_state.focus_sku_after_save = False
 
-    # WIDGET INPUT
     st.text_input("Masukkan Kode SKU:", key=f"input_sku_field_{v}")
     st.text_input("Jumlah Stok:", key=f"input_stok_field_{v}")
     st.text_input(
@@ -372,7 +358,6 @@ def ui_input_barang():
 
     st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
 
-    # SUNTIKAN JAVASCRIPT UNTUK MEMINDAHKAN KURSOR SECARA INSTAN
     if target_focus:
         components.html(f"""
             <script>
@@ -397,18 +382,11 @@ def ui_hapus_barang():
 
     v = st.session_state.input_version
     
-    # LOGIKA PENDETEKSI KURSOR KHUSUS HAPUS
-    sku_val = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
-    rak_val = st.session_state.get(f"hapus_rak_field_{v}", "").strip()
-    
     target_focus = None
     if st.session_state.get("focus_hapus_sku_after_save", False):
         target_focus = "Masukkan Kode SKU yang akan dihapus:"
-        st.session_state.focus_hapus_sku_after_save = False # Reset flag
-    elif sku_val and not rak_val:
-        target_focus = "Ketik Nama Rak Asal (Enter untuk Hapus Cepat):"
+        st.session_state.focus_hapus_sku_after_save = False
 
-    # WIDGET HAPUS
     st.text_input("Masukkan Kode SKU yang akan dihapus:", key=f"hapus_sku_field_{v}")
     st.text_input(
         "Ketik Nama Rak Asal (Enter untuk Hapus Cepat):", 
@@ -418,7 +396,6 @@ def ui_hapus_barang():
 
     st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
 
-    # JAVASCRIPT KURSOR
     if target_focus:
         components.html(f"""
             <script>
@@ -448,8 +425,7 @@ def ui_ambil_barang():
 
     def process_scanned_sku():
         raw_val = st.session_state.quick_scan_input.strip()
-        if not raw_val:
-            return
+        if not raw_val: return
 
         rak_terpilih = st.session_state.ambil_rak_field.strip()
         
@@ -515,45 +491,27 @@ def ui_ambil_barang():
                     st.write(f"📦 **{sku_item}**")
                 with col2:
                     opsi_stok = [f"Stok Asal: {item['stok']}" for item in matching_items]
-                    st.selectbox(
-                        "Pilih Target", 
-                        opsi_stok, 
-                        key=f"target_batch_{sku_item}", 
-                        label_visibility="collapsed"
-                    )
+                    st.selectbox("Pilih Target", opsi_stok, key=f"target_batch_{sku_item}", label_visibility="collapsed")
                 with col3:
-                    new_qty = st.number_input(
-                        f"Jumlah {sku_item}", 
-                        min_value=1, 
-                        key=f"qty_num_{sku_item}", 
-                        label_visibility="collapsed"
-                    )
+                    new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, key=f"qty_num_{sku_item}", label_visibility="collapsed")
                     st.session_state.scan_cart[sku_item] = new_qty
                 with col4:
                     if st.button("❌", key=f"del_{sku_item}"):
                         del st.session_state.scan_cart[sku_item]
-                        if f"qty_num_{sku_item}" in st.session_state:
-                            del st.session_state[f"qty_num_{sku_item}"]
-                        if f"target_batch_{sku_item}" in st.session_state:
-                            del st.session_state[f"target_batch_{sku_item}"]
+                        if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
+                        if f"target_batch_{sku_item}" in st.session_state: del st.session_state[f"target_batch_{sku_item}"]
                         st.rerun()
             else:
                 col1, col2, col3 = st.columns([2, 2, 1])
                 with col1:
                     st.write(f"📦 **{sku_item}**")
                 with col2:
-                    new_qty = st.number_input(
-                        f"Jumlah {sku_item}", 
-                        min_value=1, 
-                        key=f"qty_num_{sku_item}", 
-                        label_visibility="collapsed"
-                    )
+                    new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, key=f"qty_num_{sku_item}", label_visibility="collapsed")
                     st.session_state.scan_cart[sku_item] = new_qty
                 with col3:
                     if st.button("❌", key=f"del_{sku_item}"):
                         del st.session_state.scan_cart[sku_item]
-                        if f"qty_num_{sku_item}" in st.session_state:
-                            del st.session_state[f"qty_num_{sku_item}"]
+                        if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
                         st.rerun()
             
             total_items += st.session_state.scan_cart.get(sku_item, 0)
@@ -606,20 +564,16 @@ def ui_ambil_barang():
                         save_data_to_sheets()
                         st.session_state.global_notif = {"tab": "ambil", "type": "success", "text": "Berhasil! " + " | ".join(pesan_hasil)}
                         for sku_item in list(st.session_state.scan_cart.keys()):
-                            if f"qty_num_{sku_item}" in st.session_state:
-                                del st.session_state[f"qty_num_{sku_item}"]
-                            if f"target_batch_{sku_item}" in st.session_state:
-                                del st.session_state[f"target_batch_{sku_item}"]
+                            if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
+                            if f"target_batch_{sku_item}" in st.session_state: del st.session_state[f"target_batch_{sku_item}"]
                         st.session_state.scan_cart = {}
                         st.rerun()
 
         with c_b2:
             if st.button("🗑️ Reset Daftar", use_container_width=True):
                 for sku_item in list(st.session_state.scan_cart.keys()):
-                    if f"qty_num_{sku_item}" in st.session_state:
-                        del st.session_state[f"qty_num_{sku_item}"]
-                    if f"target_batch_{sku_item}" in st.session_state:
-                        del st.session_state[f"target_batch_{sku_item}"]
+                    if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
+                    if f"target_batch_{sku_item}" in st.session_state: del st.session_state[f"target_batch_{sku_item}"]
                 st.session_state.scan_cart = {}
                 st.rerun()
     else:
@@ -681,7 +635,6 @@ def ui_mutasi_barang():
             st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Proses dibatalkan. Pastikan SKU dan Rak Asal sudah benar."}
             st.rerun()
 
-
 # ==================== RENDER APLIKASI UTAMA ====================
 
 if st.session_state.mode_aplikasi is None:
@@ -704,6 +657,47 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
+    # --- SUNTIKAN JAVASCRIPT GLOBAL UNTUK LOMPAT KURSOR SUPER INSTAN (0 DETIK) ---
+    components.html("""
+        <script>
+        const doc = window.parent.document;
+        if (!doc.getElementById('smart-focus-script')) {
+            const script = doc.createElement('script');
+            script.id = 'smart-focus-script';
+            script.innerHTML = `
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        const active = document.activeElement;
+                        if (!active || active.tagName !== 'INPUT') return;
+                        
+                        const label = active.getAttribute('aria-label');
+                        
+                        if (label === 'Masukkan Kode SKU:') {
+                            setTimeout(() => {
+                                const next = document.querySelector('input[aria-label="Jumlah Stok:"]');
+                                if (next) next.focus();
+                            }, 50);
+                        }
+                        else if (label === 'Jumlah Stok:') {
+                            setTimeout(() => {
+                                const next = document.querySelector('input[aria-label="Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):"]');
+                                if (next) next.focus();
+                            }, 50);
+                        }
+                        else if (label === 'Masukkan Kode SKU yang akan dihapus:') {
+                            setTimeout(() => {
+                                const next = document.querySelector('input[aria-label="Ketik Nama Rak Asal (Enter untuk Hapus Cepat):"]');
+                                if (next) next.focus();
+                            }, 50);
+                        }
+                    }
+                }, true);
+            `;
+            doc.head.appendChild(script);
+        }
+        </script>
+    """, height=0, width=0)
+
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
@@ -724,7 +718,6 @@ else:
         with col_tengah:
             ui_pencarian_visual()
         with col_kanan:
-            # Di komputer, Input dan Hapus digabung di kolom kanan secara vertikal
             ui_input_barang()
             st.markdown("---")
             ui_hapus_barang()
@@ -733,7 +726,6 @@ else:
             st.markdown("---")
             ui_mutasi_barang()
     else:
-        # Di HP, dipisah menjadi tab-tab berbeda
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "❌ Hapus", "📤 Ambil", "🔄 Mutasi"])
         
         with tab1:
