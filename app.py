@@ -130,7 +130,7 @@ if "focus_target" not in st.session_state:
     st.session_state.focus_target = None
 
 
-# ==================== CALLBACK TAMBAH RAK (KOTAK BAJA / STATIC) ====================
+# ==================== CALLBACK TAMBAH RAK (LOGIKA BERSIH & AKURAT) ====================
 def on_enter_tambah_rak():
     clean_val = st.session_state.input_rak_baru_scan.strip()
     if not clean_val: return
@@ -142,7 +142,7 @@ def on_enter_tambah_rak():
     else:
         st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada."}
         
-    st.session_state.input_rak_baru_scan = "" # Bersihkan tanpa merusak kotak DOM
+    st.session_state.input_rak_baru_scan = "" 
     st.session_state.focus_target = "Nama Rak Baru:"
 
 # ==================== CALLBACK DATABASE RAK ====================
@@ -315,6 +315,7 @@ def process_scanned_sku():
 
 def proses_konfirmasi_ambil():
     ambil_rak = st.session_state.ambil_rak_field.strip()
+    
     if not ambil_rak:
         st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Nama Rak Asal harus diisi!"}
         return
@@ -626,13 +627,14 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
-    # --- JAVASCRIPT GLOBAL (KURSOR ANTI GAGAL & PENAHAN TAB) ---
+    # --- JAVASCRIPT GLOBAL (KURSOR ANTI TUMPANG TINDIH & PENGUNCI TAB) ---
     components.html("""
         <script>
         const doc = window.parent.document;
 
-        // Bersihkan memori usang agar tidak bentrok
+        // BERSILAN KODE LAMA AGAR TIDAK ERROR
         if (doc.gudang_keydown) doc.removeEventListener('keydown', doc.gudang_keydown, true);
+        if (doc.gudang_keyup) doc.removeEventListener('keyup', doc.gudang_keyup, true);
         if (doc.gudang_click) doc.removeEventListener('click', doc.gudang_click, true);
 
         function focusByLabelText(labelText) {
@@ -644,7 +646,7 @@ else:
                     const input = doc.getElementById(inputId);
                     if (input) input.focus();
                 }
-            }, 150); 
+            }, 100); 
         }
 
         // 1. KONTROL LOMPAT KURSOR SAAT MENEKAN ENTER
@@ -669,7 +671,26 @@ else:
             }
         };
 
-        // 2. KONTROL MEMORI TAB & FOKUS SAAT TAB DIKLIK
+        // 2. KONTROL PEMBERSIH KOTAK OTOMATIS (MENCEGAH TUMPANG TINDIH SCANNER)
+        doc.gudang_keyup = function(e) {
+            if (e.key === 'Enter') {
+                const active = doc.activeElement;
+                if (!active || active.tagName !== 'INPUT') return;
+                
+                const labelEl = doc.querySelector('label[for="' + active.id + '"]');
+                if (!labelEl) return;
+                const text = labelEl.innerText.trim();
+                
+                // HANYA KOTAK SCAN CEPAT YANG DIBERSIHKAN INSTAN OLEH JAVASCRIPT
+                if (text === 'Nama Rak Baru:' || text === 'Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):') {
+                    active.value = '';
+                    let event = new Event('input', { bubbles: true });
+                    active.dispatchEvent(event);
+                }
+            }
+        };
+
+        // 3. KONTROL MEMORI TAB & FOKUS SAAT TAB DIKLIK
         doc.gudang_click = function(e) {
             let tabBtn = e.target.closest('[role="tab"]');
             if (tabBtn) {
@@ -690,26 +711,27 @@ else:
         };
 
         doc.addEventListener('keydown', doc.gudang_keydown, true);
+        doc.addEventListener('keyup', doc.gudang_keyup, true);
         doc.addEventListener('click', doc.gudang_click, true);
 
-        // 3. PEMULIHAN TAB SAAT BROWSER REFRESH / SCAN CEPAT
-        function restoreTab() {
+        // 4. PENGUNCI TAB AGRESIF (MEMAKSA BALIK KE TAB TERAKHIR SAAT REFRESH/RELOAD)
+        let restoreAttempts = 0;
+        let restoreInterval = setInterval(() => {
             let savedTabIdx = sessionStorage.getItem('gudangActiveTab');
             if (savedTabIdx !== null) {
                 let tabs = Array.from(doc.querySelectorAll('[role="tab"]'));
                 if (tabs.length > savedTabIdx) {
                     if (tabs[savedTabIdx].getAttribute('aria-selected') !== 'true') {
-                        tabs[savedTabIdx].click();
+                        tabs[savedTabIdx].click(); // Paksa klik tab terakhir
+                    } else {
+                        clearInterval(restoreInterval);
                     }
                 }
             }
-        }
-        
-        // Panggil beberapa kali untuk memastikan menangkap momen Streamlit selesai loading
-        setTimeout(restoreTab, 50);
-        setTimeout(restoreTab, 300);
-        setTimeout(restoreTab, 800);
-        
+            restoreAttempts++;
+            if(restoreAttempts > 20) clearInterval(restoreInterval); 
+        }, 100);
+
         </script>
     """, height=0, width=0)
 
