@@ -97,6 +97,18 @@ def save_data_to_sheets():
     except TypeError:
         sheet_rak.update("A1", data_rak)
         sheet_isi.update("A1", data_isi)
+        
+    # Reset timer sync otomatis setiap kali berhasil menyimpan data
+    st.session_state.last_sync_time = time.time()
+
+# ==================== AUTO-SYNC PINTAR (5 MENIT) ====================
+if "last_sync_time" not in st.session_state:
+    st.session_state.last_sync_time = 0
+
+# Jika tab komputer didiamkan lebih dari 5 menit, otomatis sedot data terbaru dari Google Sheets
+if time.time() - st.session_state.last_sync_time > 300:
+    st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
+    st.session_state.last_sync_time = time.time()
 
 if "rak_gudang_tanpa_posisi" not in st.session_state:
     st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
@@ -108,13 +120,34 @@ if "input_version" not in st.session_state:
     st.session_state.input_version = 0
 
 
+# ==================== CALLBACK TAMBAH RAK BARU INSTAN (BEBAS DELAY) ====================
+def proses_tambah_rak():
+    val = st.session_state.input_rak_baru_scan.strip()
+    if not val:
+        return
+        
+    # Jika PDA memindai terlalu cepat dan menumpuk teks dengan spasi, sistem akan memecahnya
+    r_list = val.split() if " " in val else [val]
+    
+    added = []
+    for r in r_list:
+        if r not in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.rak_gudang_tanpa_posisi[r] = []
+            added.append(r)
+            
+    if added:
+        save_data_to_sheets()
+        pesan_rak = " | ".join(added)
+        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"✅ Rak '{pesan_rak}' berhasil ditambahkan!"}
+    else:
+        st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"⚠️ Nama rak sudah terdaftar."}
+        
+    # Kosongkan kolom dengan kecepatan instan
+    st.session_state.input_rak_baru_scan = ""
+
 # ==================== CALLBACK DATABASE RAK (UNTUK EDIT INSTAN) ====================
 def proses_perubahan_tabel_rak():
     changes = st.session_state.editor_tabel_rak
-    
-    # AUTO-SYNC SILUMAN: Tarik data terbaru dari Sheet sebelum melakukan perubahan database Rak
-    st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-    
     rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
     needs_save = False
     ada_error = False
@@ -161,20 +194,13 @@ def ui_manajemen_rak():
     placeholders["rak"] = st.empty() 
 
     st.markdown("#### ➕ Tambah Rak Baru")
-    with st.form("tambah_rak_menyatu", clear_on_submit=True):
-        t_rak = st.text_input("Nama Rak Baru:").strip()
-        if st.form_submit_button("Simpan Rak") and t_rak:
-            # AUTO-SYNC SILUMAN
-            st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-            
-            if t_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.session_state.rak_gudang_tanpa_posisi[t_rak] = []
-                save_data_to_sheets()
-                st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Rak '{t_rak}' berhasil ditambahkan!"}
-                st.rerun()
-            else:
-                st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
-                st.rerun()
+    # Teks input mendengarkan ketukan Enter dari scanner secara instan tanpa batas "Form"
+    st.text_input(
+        "Nama Rak Baru:", 
+        key="input_rak_baru_scan", 
+        on_change=proses_tambah_rak,
+        placeholder="Scan Barcode / Ketik lalu tekan Enter..."
+    )
 
     st.markdown("---")
     
@@ -210,9 +236,6 @@ def ui_pencarian_visual():
     search_query = st.text_input("Masukkan Kode SKU atau Nama Rak:", placeholder="Contoh: ketik 'mj', '459', atau 'A-1'...", key="main_search_input").strip()
 
     if search_query:
-        # AUTO-SYNC SILUMAN: Tarik data terbaru saat Anda mengetik pencarian
-        st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-        
         hasil_cari = []
         for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
             rak_cocok = search_query.lower() in nama_rak.lower()
@@ -263,9 +286,6 @@ def ui_input_barang():
         btn_hapus = st.button("Hapus SKU", use_container_width=True)
 
     if btn_simpan:
-        # AUTO-SYNC SILUMAN
-        st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-        
         if not edit_sku:
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Kode SKU harus diisi!"}
             st.rerun()
@@ -286,9 +306,6 @@ def ui_input_barang():
             st.rerun()
 
     if btn_hapus:
-        # AUTO-SYNC SILUMAN
-        st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-        
         if not edit_sku:
             st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Masukkan Kode SKU yang ingin dihapus!"}
             st.rerun()
@@ -435,9 +452,6 @@ def ui_ambil_barang():
         c_b1, c_b2 = st.columns(2)
         with c_b1:
             if st.button("✅ Konfirmasi Pengurangan Stok", use_container_width=True, type="primary"):
-                # AUTO-SYNC SILUMAN
-                st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-                
                 if not ambil_rak:
                     st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Nama Rak Asal harus diisi!"}
                     st.rerun()
@@ -532,9 +546,6 @@ def ui_mutasi_barang():
     tujuan_rak = st.text_input("Nama Rak Tujuan:", key="mutasi_tujuan_input").strip()
 
     if st.button("🔄 Pindah Rak", use_container_width=True, type="primary"):
-        # AUTO-SYNC SILUMAN
-        st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-        
         if not mutasi_sku or not mutasi_asal or not tujuan_rak:
             st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ SKU, Rak Asal, dan Rak Tujuan wajib diisi."}
             st.rerun()
@@ -544,30 +555,20 @@ def ui_mutasi_barang():
         elif mutasi_asal == tujuan_rak:
             st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak tujuan tidak boleh sama dengan rak asal."}
             st.rerun()
-        else:
-            # Evaluasi ulang barang yang dipilih berdasarkan data super fresh dari Google Sheet
-            items_di_rak_terbaru = st.session_state.rak_gudang_tanpa_posisi.get(mutasi_asal, [])
-            matching_items_terbaru = [item for item in items_di_rak_terbaru if item["sku"].lower() == mutasi_sku.lower()]
+        elif item_terpilih:
+            rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
+            stok_yang_ikut = item_terpilih["stok"]
+            sku_asli = item_terpilih["sku"]
             
-            fresh_item_terpilih = None
-            if len(matching_items_terbaru) > 1:
-                opsi_kembar = st.session_state.get("mutasi_dropdown_kembar")
-                if opsi_kembar:
-                    target_stok = int(opsi_kembar.replace("Stok Asal: ", ""))
-                    fresh_item_terpilih = next((item for item in matching_items_terbaru if item["stok"] == target_stok), None)
-            elif len(matching_items_terbaru) == 1:
-                fresh_item_terpilih = matching_items_terbaru[0]
-
-            if fresh_item_terpilih:
-                st.session_state.rak_gudang_tanpa_posisi[mutasi_asal].remove(fresh_item_terpilih)
-                st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": fresh_item_terpilih["sku"], "stok": fresh_item_terpilih["stok"]})
-                save_data_to_sheets()
-                
-                st.session_state.global_notif = {"tab": "mutasi", "type": "success", "text": f"Berhasil memindah SKU '{fresh_item_terpilih['sku']}' (Stok: {fresh_item_terpilih['stok']}) ke '{tujuan_rak}'."}
-                st.rerun()
-            else:
-                st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Proses dibatalkan. Barang mungkin sudah dipindahkan/dihapus dari perangkat lain."}
-                st.rerun()
+            rak_asal_items.remove(item_terpilih)
+            st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": sku_asli, "stok": stok_yang_ikut})
+            save_data_to_sheets()
+            
+            st.session_state.global_notif = {"tab": "mutasi", "type": "success", "text": f"Berhasil memindah SKU '{sku_asli}' (Stok: {stok_yang_ikut}) ke '{tujuan_rak}'."}
+            st.rerun()
+        else:
+            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Proses dibatalkan. Pastikan SKU dan Rak Asal sudah benar."}
+            st.rerun()
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
@@ -592,7 +593,6 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
-    # --- HEADER KEMBALI SEPERTI SEMULA TANPA TOMBOL SINKRONISASI ---
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
