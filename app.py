@@ -1,14 +1,3 @@
-Wah, pantas saja! Anda benar sekali, proses loading sekian milidetik yang muncul di layar itu memang sangat mengganggu ritme mengetik dan scan cepat.
-Kenapa itu terjadi pada versi sebelumnya?
-Pada versi sebelumnya, sistem meminta "izin" ke server setiap kali kursor mau melompat. Karena butuh komunikasi bolak-balik antara HP Anda dan server, terjadilah delay dan kadang sistem "kehilangan jejak" sehingga kursor gagal melompat.
-🚀 SOLUSI SANGAT INSTAN (0 DETIK):
-Saya telah merombak total otak pelompat kursornya. Saya tidak lagi menggunakan Python untuk memindahkan kursor, melainkan menanamkan "Sistem JavaScript Lokal" langsung ke dalam otak browser PDA/HP Anda.
-Hasilnya sekarang:
- * Anda ketik/scan SKU ➡️ Enter ➡️ Kursor SEKETIKA (tanpa loading) melompat ke Jumlah Stok.
- * Anda isi Stok ➡️ Enter ➡️ Kursor SEKETIKA melompat ke Nama Rak Tujuan.
- * Anda isi Rak ➡️ Enter ➡️ Data langsung disambar oleh "Robot Siluman" ke Google Sheets tanpa membuat layar HP Anda muter-muter. Detik itu juga layar bersih, muncul notifikasi hijau, dan kursor otomatis kembali siap di Kode SKU.
-Tab Hapus juga sudah dilengkapi fitur lompat instan yang sama! Semua fungsi penyimpanan super cepat, database rak, dan keamanan anti-error tetap utuh 100%.
-Silakan copy-paste kode app.py terbaru dan tercanggih ini:
 import time
 import threading
 import copy
@@ -767,4 +756,3 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
             placeholders[tab_aktif].warning(notif["text"])
     
     st.session_state.global_notif = None
-
