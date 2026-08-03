@@ -103,17 +103,63 @@ if "input_version" not in st.session_state:
     st.session_state.input_version = 0
 
 
+# ==================== CALLBACK DATABASE RAK (UNTUK EDIT INSTAN) ====================
+def proses_perubahan_tabel_rak():
+    changes = st.session_state.editor_tabel_rak
+    rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+    needs_save = False
+    ada_error = False
+    
+    # 1. Menangani Penghapusan Rak
+    if changes.get("deleted_rows"):
+        for idx in sorted(changes["deleted_rows"], reverse=True):
+            if idx < len(rak_sorted):
+                old_name = rak_sorted[idx]
+                if old_name in st.session_state.rak_gudang_tanpa_posisi:
+                    del st.session_state.rak_gudang_tanpa_posisi[old_name]
+                    needs_save = True
+
+    # 2. Menangani Perubahan Nama Rak
+    if changes.get("edited_rows"):
+        for idx, edit_data in changes["edited_rows"].items():
+            if "Nama Rak" in edit_data:
+                if idx < len(rak_sorted):
+                    old_name = rak_sorted[idx]
+                    new_name = edit_data["Nama Rak"].strip()
+                    if old_name in st.session_state.rak_gudang_tanpa_posisi and new_name and new_name != old_name:
+                        if new_name not in st.session_state.rak_gudang_tanpa_posisi:
+                            # Pindahkan semua isinya ke nama rak yang baru
+                            st.session_state.rak_gudang_tanpa_posisi[new_name] = st.session_state.rak_gudang_tanpa_posisi.pop(old_name)
+                            needs_save = True
+                        else:
+                            st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Gagal! Nama rak '{new_name}' sudah ada."}
+                            ada_error = True
+
+    # 3. Menangani Penambahan Baris dari Tabel (Jika pengguna iseng nambah via tabel)
+    if changes.get("added_rows"):
+        for row in changes["added_rows"]:
+            if "Nama Rak" in row and row["Nama Rak"]:
+                new_name = row["Nama Rak"].strip()
+                if new_name and new_name not in st.session_state.rak_gudang_tanpa_posisi:
+                    st.session_state.rak_gudang_tanpa_posisi[new_name] = []
+                    needs_save = True
+
+    if needs_save and not ada_error:
+        save_data_to_sheets()
+        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!"}
+
+
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
 def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
     placeholders["rak"] = st.empty() 
 
-    # --- BAGIAN 1: TAMBAH RAK BARU ---
+    # --- BAGIAN 1: FORM TAMBAH RAK ---
     st.markdown("#### ➕ Tambah Rak Baru")
     with st.form("tambah_rak_menyatu", clear_on_submit=True):
         t_rak = st.text_input("Nama Rak Baru:").strip()
-        if st.form_submit_button("Tambah Rak") and t_rak:
+        if st.form_submit_button("Simpan Rak") and t_rak:
             if t_rak not in st.session_state.rak_gudang_tanpa_posisi:
                 st.session_state.rak_gudang_tanpa_posisi[t_rak] = []
                 save_data_to_sheets()
@@ -125,50 +171,35 @@ def ui_manajemen_rak():
 
     st.markdown("---")
     
-    # --- BAGIAN 2: EDIT / HAPUS RAK DENGAN CHECKBOX ---
-    st.markdown("#### 🗄️ Edit / Hapus Rak")
-    st.caption("Centang rak di bawah ini untuk mengubah nama atau menghapusnya.")
+    # --- BAGIAN 2: DATABASE TABEL (BISA DIEDIT LANGSUNG) ---
+    st.markdown("#### 🗄️ Database Rak")
+    st.caption("💡 **Tips:** Untuk mengubah nama, klik 2x pada nama rak di tabel lalu tekan **Enter**. Untuk menghapus, centang kotak di sisi paling kiri lalu tekan **Delete** di keyboard atau klik ikon tong sampah di kanan atas tabel.")
     
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
-        rak_terpilih = []
-        for r_nama in st.session_state.rak_gudang_tanpa_posisi.keys():
-            # Jika checkbox dicentang, masukkan nama rak ke dalam list rak_terpilih
-            if st.checkbox(f"📁 Rak: {r_nama}", key=f"chk_{r_nama}"):
-                rak_terpilih.append(r_nama)
-                
-        # Jika hanya 1 rak yang dicentang (Bisa Edit & Hapus)
-        if len(rak_terpilih) == 1:
-            rak_target = rak_terpilih[0]
-            nama_rak_baru = st.text_input(f"Ubah Nama '{rak_target}' Menjadi:", key="edit_rak_name_input").strip()
-            c_r1, c_r2 = st.columns(2)
-            with c_r1:
-                if st.button("Ubah Nama Rak", use_container_width=True) and nama_rak_baru:
-                    if nama_rak_baru not in st.session_state.rak_gudang_tanpa_posisi:
-                        st.session_state.rak_gudang_tanpa_posisi[nama_rak_baru] = st.session_state.rak_gudang_tanpa_posisi.pop(rak_target)
-                        save_data_to_sheets()
-                        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Nama rak berhasil diubah menjadi '{nama_rak_baru}'!"}
-                        st.rerun()
-                    else:
-                        st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
-                        st.rerun()
-            with c_r2:
-                if st.button(f"🗑️ Hapus Rak", use_container_width=True):
-                    st.session_state.rak_gudang_tanpa_posisi.pop(rak_target)
-                    save_data_to_sheets()
-                    st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"Rak '{rak_target}' berhasil dihapus!"}
-                    st.rerun()
-                    
-        # Jika lebih dari 1 rak yang dicentang (Hanya Bisa Hapus Masal)
-        elif len(rak_terpilih) > 1:
-            st.warning("⚠️ Anda mencentang lebih dari 1 rak. Fitur ubah nama dinonaktifkan, namun Anda bisa menghapus semuanya sekaligus.")
-            if st.button(f"🗑️ Hapus {len(rak_terpilih)} Rak Terpilih", use_container_width=True):
-                for r in rak_terpilih:
-                    st.session_state.rak_gudang_tanpa_posisi.pop(r)
-                save_data_to_sheets()
-                st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"{len(rak_terpilih)} rak berhasil dihapus sekaligus!"}
-                st.rerun()
+        # Urutkan abjad sesuai permintaan
+        rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+        df_rak = []
+        for r in rak_sorted:
+            items = st.session_state.rak_gudang_tanpa_posisi[r]
+            sku_count = len(items)
+            total_stok = sum(item["stok"] for item in items)
+            df_rak.append({"Nama Rak": r, "Jumlah SKU": sku_count, "Total Stok": total_stok})
+            
+        # Merender tabel Data Editor interaktif persis seperti referensi spreadsheet
+        st.data_editor(
+            df_rak,
+            column_config={
+                "Nama Rak": st.column_config.TextColumn("Nama Rak", required=True),
+                "Jumlah SKU": st.column_config.NumberColumn("Total Item Berbeda", disabled=True),
+                "Total Stok": st.column_config.NumberColumn("Total Stok Fisik", disabled=True)
+            },
+            use_container_width=True,
+            num_rows="dynamic", # num_rows dinamis inilah yang memunculkan kotak centang hapus otomatis
+            key="editor_tabel_rak",
+            on_change=proses_perubahan_tabel_rak
+        )
 
 def ui_pencarian_visual():
     st.markdown("### 🔍 Pencarian Barang / Rak")
@@ -197,7 +228,10 @@ def ui_pencarian_visual():
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
-        for r_nama, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
+        # Agar visualisasi juga ikut berurutan abjad
+        rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+        for r_nama in rak_sorted_visual:
+            daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
             st.markdown(f"#### 📁 {r_nama}")
             if not daftar_item:
                 st.error("⬜ *RAK KOSONG*")
