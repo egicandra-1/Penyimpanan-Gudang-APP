@@ -132,7 +132,7 @@ if "cari_results" not in st.session_state:
 if "focus_target" not in st.session_state:
     st.session_state.focus_target = None
 
-# ==================== CALLBACK TAMBAH RAK ====================
+# ==================== CALLBACK TAMBAH RAK (ANTI TUMPANG TINDIH) ====================
 def on_enter_tambah_rak():
     raw_val = st.session_state.input_rak_baru_scan.strip()
     if not raw_val: return
@@ -234,7 +234,6 @@ def proses_cari():
     else:
         st.session_state.global_notif = {"tab": "cari", "type": "error", "text": f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak."}
         
-    # KOSONGKAN KOLOM & KEMBALIKAN KURSOR
     st.session_state[f"search_input_{v}"] = ""
     st.session_state.input_version += 1
     st.session_state.focus_target = "Masukkan Kode SKU atau Nama Rak:"
@@ -334,7 +333,6 @@ def process_scanned_sku():
     st.session_state.scan_cart[sku_terdeteksi] = st.session_state.scan_cart.get(sku_terdeteksi, 0) + 1
     st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
     
-    # Kosongkan kolom scan dan kunci kursor tetap disitu
     st.session_state[f"quick_scan_input_{v}"] = ""
     st.session_state.focus_target = "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"
 
@@ -444,9 +442,35 @@ def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
     placeholders["rak"] = st.empty() 
 
-    st.markdown("#### ➕ Tambah Rak Baru")
-    st.text_input("Nama Rak Baru:", key="input_rak_baru_scan", on_change=on_enter_tambah_rak, placeholder="Scan Barcode / Ketik lalu tekan Enter...")
-    st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak)
+    # VISUAL DROPDOWN DIKEMBALIKAN SESUAI PERINTAH
+    st.markdown("#### 🗄️ Kelola Rak")
+    opsi_rak = ["[+ Tambah Rak Baru]"] + list(st.session_state.rak_gudang_tanpa_posisi.keys())
+    rak_terpilih_mgt = st.selectbox("Pilih Tindakan / Nama Rak:", opsi_rak, key="rak_action_select")
+
+    if rak_terpilih_mgt == "[+ Tambah Rak Baru]":
+        # Jika memilih tambah rak, akan muncul kolom input fast-scan
+        st.text_input("Nama Rak Baru:", key="input_rak_baru_scan", on_change=on_enter_tambah_rak, placeholder="Scan Barcode / Ketik lalu tekan Enter...")
+        st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak)
+    else:
+        # Jika memilih rak yang sudah ada, muncul opsi ubah dan hapus
+        nama_rak_baru = st.text_input(f"Ubah Nama '{rak_terpilih_mgt}' Menjadi:", key="edit_rak_name_input").strip()
+        c_r1, c_r2 = st.columns(2)
+        with c_r1:
+            if st.button("Ubah Nama Rak") and nama_rak_baru:
+                if nama_rak_baru not in st.session_state.rak_gudang_tanpa_posisi:
+                    st.session_state.rak_gudang_tanpa_posisi[nama_rak_baru] = st.session_state.rak_gudang_tanpa_posisi.pop(rak_terpilih_mgt)
+                    save_data_to_sheets()
+                    st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"Nama rak berhasil diubah menjadi '{nama_rak_baru}'!"}
+                    st.rerun()
+                else:
+                    st.session_state.global_notif = {"tab": "rak", "type": "error", "text": "❌ Nama rak sudah ada."}
+                    st.rerun()
+        with c_r2:
+            if st.button(f"🗑️ Hapus {rak_terpilih_mgt}"):
+                st.session_state.rak_gudang_tanpa_posisi.pop(rak_terpilih_mgt)
+                save_data_to_sheets()
+                st.session_state.global_notif = {"tab": "rak", "type": "warning", "text": f"Rak '{rak_terpilih_mgt}' berhasil dihapus!"}
+                st.rerun()
 
     st.markdown("---")
     st.markdown("#### 📋 Database Rak")
@@ -615,7 +639,7 @@ def ui_mutasi_barang():
 # ==================== RENDER APLIKASI UTAMA ====================
 
 if st.session_state.mode_aplikasi is None:
-    st.markdown("<br><br><h1 style='text-align: center;'>📦 Selamat Datang di Sistem Gudang</h1>", unsafe_allow_html=True)
+    st.markdown("<br><br><h1 style='text-align: center;'>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; font-size: 16px; font-style: italic; margin-bottom: 0px;'>\"Dibalik Bisnis Yang Besar, Ada Manajemen Yang Teratur\"</p>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; font-size: 12px; color: gray; margin-top: 2px;'>By. Egi</p>", unsafe_allow_html=True)
     
@@ -638,7 +662,6 @@ else:
         <script>
         const doc = window.parent.document;
 
-        // Fungsi andalan: Mencari kotak input berdasarkan teks label di atasnya secara persis
         function focusByLabelText(labelText) {
             setTimeout(() => {
                 const labels = Array.from(doc.querySelectorAll('label'));
@@ -648,14 +671,13 @@ else:
                     const input = doc.getElementById(inputId);
                     if (input) input.focus();
                 }
-            }, 150); // Jeda kecil agar Streamlit selesai menggambar kotak
+            }, 150); 
         }
 
         if (!doc.getElementById('bulletproof-focus-script')) {
             const script = doc.createElement('script');
             script.id = 'bulletproof-focus-script';
             script.innerHTML = `
-                // 1. Logika Lompat Kursor Pakai tombol 'Enter'
                 document.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
                         const active = document.activeElement;
@@ -667,23 +689,15 @@ else:
 
                         const text = labelEl.innerText.trim();
 
-                        // Tab Input
                         if (text === 'Masukkan Kode SKU:') focusByLabelText('Jumlah Stok:');
                         else if (text === 'Jumlah Stok:') focusByLabelText('Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):');
-                        
-                        // Tab Hapus
                         else if (text === 'Masukkan Kode SKU yang akan dihapus:') focusByLabelText('Ketik Nama Rak Asal (Enter untuk Hapus Cepat):');
-                        
-                        // Tab Ambil
                         else if (text === 'Ketik Nama Rak Asal:') focusByLabelText('Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):');
-                        
-                        // Tab Mutasi
                         else if (text === 'Nama Rak Asal:') focusByLabelText('Kode SKU yang Dipindah:');
                         else if (text === 'Kode SKU yang Dipindah:') focusByLabelText('Nama Rak Tujuan (Enter untuk Pindah):');
                     }
                 }, true);
 
-                // 2. Logika Otomatis Fokus Saat Klik Tab / Pindah Menu
                 document.addEventListener('click', function(e) {
                     let tabBtn = e.target.closest('[role="tab"]');
                     if (tabBtn) {
@@ -702,7 +716,7 @@ else:
         </script>
     """, height=0, width=0)
 
-    # --- PEMBERI PERINTAH FOKUS DARI PYTHON (Setelah Tombol Disimpan/Dicari) ---
+    # --- PEMBERI PERINTAH FOKUS DARI PYTHON ---
     if "focus_target" in st.session_state and st.session_state.focus_target:
         target_label = st.session_state.focus_target
         components.html(f"""
@@ -720,7 +734,6 @@ else:
             </script>
         """, height=0, width=0)
         st.session_state.focus_target = None
-
 
     col_judul, col_tombol = st.columns([4, 1])
     
