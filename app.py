@@ -712,6 +712,7 @@ else:
         </script>
     """, height=0, width=0)
 
+    # --- KEMBALI KE STRUKTUR ASLI [4, 1] TANPA MERUSAK LAYOUT UTAMA ---
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
@@ -724,6 +725,16 @@ else:
             st.rerun()
             
     st.divider()
+
+    # --- TOMBOL SINKRONISASI DI SIDEBAR (AGAR TAMPILAN UTAMA 100% UTUH) ---
+    with st.sidebar:
+        st.markdown("### ⚙️ Kontrol Sistem")
+        if st.button("🔁 Sinkronisasi Data", use_container_width=True, type="primary"):
+            with st.spinner("Menarik data terbaru..."):
+                st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
+            st.toast("✅ Data berhasil disinkronkan!", icon="🔄")
+            st.rerun()
+        st.caption("Gunakan tombol ini untuk menarik data terbaru jika ada input dari perangkat lain.")
 
     if st.session_state.mode_aplikasi == "komputer":
         col_kiri, col_tengah, col_kanan = st.columns([1.2, 2.0, 1.3], gap="large")
