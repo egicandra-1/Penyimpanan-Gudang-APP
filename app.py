@@ -129,7 +129,10 @@ if "input_version" not in st.session_state:
 if "cari_results" not in st.session_state:
     st.session_state.cari_results = None
 
-# ==================== CALLBACK TAMBAH RAK (ANTI TUMPANG TINDIH) ====================
+if "focus_target" not in st.session_state:
+    st.session_state.focus_target = None
+
+# ==================== CALLBACK TAMBAH RAK ====================
 def on_enter_tambah_rak():
     raw_val = st.session_state.input_rak_baru_scan.strip()
     if not raw_val: return
@@ -140,7 +143,6 @@ def on_enter_tambah_rak():
     if "last_raw_tambah_rak" in st.session_state and "last_raw_tambah_rak_time" in st.session_state:
         prev_raw = st.session_state.last_raw_tambah_rak
         prev_time = st.session_state.last_raw_tambah_rak_time
-        
         if now - prev_time < 3.0:
             if prev_raw and raw_val.startswith(prev_raw):
                 potential_clean = raw_val[len(prev_raw):].strip()
@@ -162,6 +164,7 @@ def on_enter_tambah_rak():
         st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada."}
         
     st.session_state.input_rak_baru_scan = ""
+    st.session_state.focus_target = "Nama Rak Baru:"
 
 # ==================== CALLBACK DATABASE RAK ====================
 def proses_perubahan_tabel_rak():
@@ -204,7 +207,6 @@ def proses_perubahan_tabel_rak():
         save_data_to_sheets()
         st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!"}
 
-
 # ==================== CALLBACK TAB CARI ====================
 def proses_cari():
     v = st.session_state.input_version
@@ -232,8 +234,10 @@ def proses_cari():
     else:
         st.session_state.global_notif = {"tab": "cari", "type": "error", "text": f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak."}
         
+    # KOSONGKAN KOLOM & KEMBALIKAN KURSOR
+    st.session_state[f"search_input_{v}"] = ""
     st.session_state.input_version += 1
-    st.session_state.focus_cari = True
+    st.session_state.focus_target = "Masukkan Kode SKU atau Nama Rak:"
 
 # ==================== CALLBACK TAB INPUT ====================
 def on_enter_input_barang():
@@ -258,11 +262,10 @@ def on_enter_input_barang():
     st.session_state.rak_gudang_tanpa_posisi[rak].append({"sku": sku, "stok": stok})
     
     save_data_to_sheets()
-    
     st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
     
     st.session_state.input_version += 1
-    st.session_state.focus_sku_after_save = True
+    st.session_state.focus_target = "Masukkan Kode SKU:"
 
 # ==================== CALLBACK TAB HAPUS ====================
 def on_enter_hapus_barang():
@@ -283,13 +286,58 @@ def on_enter_hapus_barang():
             st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!"}
             
             st.session_state.input_version += 1
-            st.session_state.focus_hapus_sku_after_save = True
+            st.session_state.focus_target = "Masukkan Kode SKU yang akan dihapus:"
         else:
             st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'."}
     else:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan."}
 
 # ==================== CALLBACK TAB AMBIL ====================
+def process_scanned_sku():
+    v = st.session_state.input_version
+    raw_val = st.session_state.get(f"quick_scan_input_{v}", "").strip()
+    if not raw_val: return
+
+    rak_terpilih = st.session_state.get(f"ambil_rak_field_{v}", "").strip()
+    if not rak_terpilih:
+        st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
+        st.session_state[f"quick_scan_input_{v}"] = ""
+        st.session_state.focus_target = "Ketik Nama Rak Asal:"
+        return
+        
+    if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
+        st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
+        st.session_state[f"quick_scan_input_{v}"] = ""
+        st.session_state.focus_target = "Ketik Nama Rak Asal:"
+        return
+
+    sku_terdeteksi = None
+    daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
+    
+    for real_sku in daftar_sku_rak:
+        if raw_val.lower().endswith(real_sku.lower()):
+            sku_terdeteksi = real_sku
+            break
+    
+    if not sku_terdeteksi:
+        for real_sku in daftar_sku_rak:
+            if real_sku.lower() in raw_val.lower():
+                sku_terdeteksi = real_sku
+                break
+    
+    if not sku_terdeteksi:
+        st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU '{raw_val}' tidak dikenali di rak '{rak_terpilih}'!"}
+        st.session_state[f"quick_scan_input_{v}"] = ""
+        st.session_state.focus_target = "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"
+        return
+
+    st.session_state.scan_cart[sku_terdeteksi] = st.session_state.scan_cart.get(sku_terdeteksi, 0) + 1
+    st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
+    
+    # Kosongkan kolom scan dan kunci kursor tetap disitu
+    st.session_state[f"quick_scan_input_{v}"] = ""
+    st.session_state.focus_target = "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"
+
 def proses_konfirmasi_ambil():
     v = st.session_state.input_version
     ambil_rak = st.session_state.get(f"ambil_rak_field_{v}", "").strip()
@@ -343,7 +391,7 @@ def proses_konfirmasi_ambil():
         st.session_state.scan_cart = {}
         
         st.session_state.input_version += 1
-        st.session_state.focus_ambil_awal = True
+        st.session_state.focus_target = "Ketik Nama Rak Asal:"
 
 # ==================== CALLBACK TAB MUTASI ====================
 def proses_mutasi():
@@ -386,31 +434,11 @@ def proses_mutasi():
         st.session_state.global_notif = {"tab": "mutasi", "type": "success", "text": f"Berhasil memindah SKU '{sku_asli}' (Stok: {stok_yang_ikut}) ke '{tujuan_rak}'."}
         
         st.session_state.input_version += 1
-        st.session_state.focus_mutasi_awal = True
+        st.session_state.focus_target = "Nama Rak Asal:"
     else:
         st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Proses dibatalkan. Pastikan SKU dan Rak Asal sudah benar."}
 
-
 # ==================== FUNGSI TAMPILAN (UI) ====================
-
-def inject_focus_script(target_label):
-    if target_label:
-        components.html(f"""
-            <script>
-            const doc = window.parent.document;
-            function tryFocus(label, attempts) {{
-                if (attempts <= 0) return;
-                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
-                if (inputToFocus) {{
-                    setTimeout(() => inputToFocus.focus(), 50);
-                }} else {{
-                    setTimeout(() => tryFocus(label, attempts - 1), 100);
-                }}
-            }}
-            tryFocus('{target_focus}', 15);
-            </script>
-        """, height=0, width=0)
 
 def ui_manajemen_rak():
     st.markdown("### 🛠️ Manajemen Struktur")
@@ -453,12 +481,6 @@ def ui_pencarian_visual():
     placeholders["cari"] = st.empty()
     
     v = st.session_state.input_version
-    
-    target_focus = None
-    if st.session_state.get("focus_cari", False):
-        target_focus = "Masukkan Kode SKU atau Nama Rak:"
-        st.session_state.focus_cari = False
-        
     st.text_input("Masukkan Kode SKU atau Nama Rak:", key=f"search_input_{v}", on_change=proses_cari)
     st.button("🔍 Cari", use_container_width=True, on_click=proses_cari)
 
@@ -487,43 +509,27 @@ def ui_pencarian_visual():
                 for idx, item in enumerate(daftar_item):
                     with cols[idx % 4]:
                         st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
-                        
-    inject_focus_script(target_focus)
 
 def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
     placeholders["input"] = st.empty() 
 
     v = st.session_state.input_version
-    
-    target_focus = None
-    if st.session_state.get("focus_sku_after_save", False):
-        target_focus = "Masukkan Kode SKU:"
-        st.session_state.focus_sku_after_save = False
-
     st.text_input("Masukkan Kode SKU:", key=f"input_sku_field_{v}")
     st.text_input("Jumlah Stok:", key=f"input_stok_field_{v}")
     st.text_input("Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):", key=f"input_rak_field_{v}", on_change=on_enter_input_barang)
 
     st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
-    inject_focus_script(target_focus)
 
 def ui_hapus_barang():
     st.markdown("### ❌ Hapus Barang dari Rak")
     placeholders["hapus"] = st.empty() 
 
     v = st.session_state.input_version
-    
-    target_focus = None
-    if st.session_state.get("focus_hapus_sku_after_save", False):
-        target_focus = "Masukkan Kode SKU yang akan dihapus:"
-        st.session_state.focus_hapus_sku_after_save = False
-
     st.text_input("Masukkan Kode SKU yang akan dihapus:", key=f"hapus_sku_field_{v}")
     st.text_input("Ketik Nama Rak Asal (Enter untuk Hapus Cepat):", key=f"hapus_rak_field_{v}", on_change=on_enter_hapus_barang)
 
     st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
-    inject_focus_script(target_focus)
 
 def ui_ambil_barang():
     st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
@@ -533,65 +539,17 @@ def ui_ambil_barang():
         st.session_state.scan_cart = {} 
 
     v = st.session_state.input_version
-    
-    target_focus = None
-    if st.session_state.get("focus_ambil_awal", False):
-        target_focus = "Ketik Nama Rak Asal:"
-        st.session_state.focus_ambil_awal = False
-
     st.text_input("Ketik Nama Rak Asal:", key=f"ambil_rak_field_{v}")
-
-    def process_scanned_sku():
-        raw_val = st.session_state.quick_scan_input.strip()
-        if not raw_val: return
-
-        rak_terpilih = st.session_state.get(f"ambil_rak_field_{v}", "").strip()
-        
-        if not rak_terpilih:
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
-            st.session_state.quick_scan_input = ""
-            return
-            
-        if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
-            st.session_state.quick_scan_input = ""
-            return
-
-        sku_terdeteksi = None
-        daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
-        
-        for real_sku in daftar_sku_rak:
-            if raw_val.lower().endswith(real_sku.lower()):
-                sku_terdeteksi = real_sku
-                break
-        
-        if not sku_terdeteksi:
-            for real_sku in daftar_sku_rak:
-                if real_sku.lower() in raw_val.lower():
-                    sku_terdeteksi = real_sku
-                    break
-        
-        if not sku_terdeteksi:
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU tidak dikenali di rak '{rak_terpilih}'!"}
-            st.session_state.quick_scan_input = ""
-            return
-
-        st.session_state.scan_cart[sku_terdeteksi] = st.session_state.scan_cart.get(sku_terdeteksi, 0) + 1
-        st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
-        st.session_state.quick_scan_input = ""
-
-    st.text_input("Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", key="quick_scan_input", on_change=process_scanned_sku, placeholder="Arahkan scanner ke barcode...")
+    st.text_input("Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", key=f"quick_scan_input_{v}", on_change=process_scanned_sku, placeholder="Arahkan scanner ke barcode...")
 
     if st.session_state.scan_cart:
         st.markdown("#### 🛒 Daftar Barang yang Akan Dikurangi:")
         total_items = 0
-        
         rak_aktif = st.session_state.get(f"ambil_rak_field_{v}", "").strip()
         items_di_rak = st.session_state.rak_gudang_tanpa_posisi.get(rak_aktif, [])
 
         for sku_item, qty in list(st.session_state.scan_cart.items()):
             matching_items = [item for item in items_di_rak if item["sku"].lower() == sku_item.lower()]
-            
             if len(matching_items) > 1:
                 col1, col2, col3, col4 = st.columns([1.5, 2.5, 1.5, 1])
                 with col1: st.write(f"📦 **{sku_item}**")
@@ -604,8 +562,6 @@ def ui_ambil_barang():
                 with col4:
                     if st.button("❌", key=f"del_{sku_item}"):
                         del st.session_state.scan_cart[sku_item]
-                        if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
-                        if f"target_batch_{sku_item}" in st.session_state: del st.session_state[f"target_batch_{sku_item}"]
                         st.rerun()
             else:
                 col1, col2, col3 = st.columns([2, 2, 1])
@@ -616,7 +572,6 @@ def ui_ambil_barang():
                 with col3:
                     if st.button("❌", key=f"del_{sku_item}"):
                         del st.session_state.scan_cart[sku_item]
-                        if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
                         st.rerun()
             total_items += st.session_state.scan_cart.get(sku_item, 0)
 
@@ -629,27 +584,16 @@ def ui_ambil_barang():
             st.button("✅ Konfirmasi Pengurangan Stok", use_container_width=True, on_click=proses_konfirmasi_ambil)
         with c_b2:
             if st.button("🗑️ Reset Daftar", use_container_width=True):
-                for sku_item in list(st.session_state.scan_cart.keys()):
-                    if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
-                    if f"target_batch_{sku_item}" in st.session_state: del st.session_state[f"target_batch_{sku_item}"]
                 st.session_state.scan_cart = {}
                 st.rerun()
     else:
         st.info("💡 Ketik nama rak dulu, lalu scan barcode Anda berulang kali di kotak atas.")
-        
-    inject_focus_script(target_focus)
 
 def ui_mutasi_barang():
     st.markdown("### 🔄 Mutasi (Pindah Rak)")
     placeholders["mutasi"] = st.empty() 
     
     v = st.session_state.input_version
-    
-    target_focus = None
-    if st.session_state.get("focus_mutasi_awal", False):
-        target_focus = "Nama Rak Asal:"
-        st.session_state.focus_mutasi_awal = False
-        
     mutasi_asal = st.text_input("Nama Rak Asal:", key=f"mutasi_asal_{v}").strip()
     mutasi_sku = st.text_input("Kode SKU yang Dipindah:", key=f"mutasi_sku_{v}").strip()
     
@@ -666,8 +610,6 @@ def ui_mutasi_barang():
 
     st.text_input("Nama Rak Tujuan (Enter untuk Pindah):", key=f"mutasi_tujuan_{v}", on_change=proses_mutasi)
     st.button("🔄 Pindah Rak", use_container_width=True, on_click=proses_mutasi)
-    
-    inject_focus_script(target_focus)
 
 
 # ==================== RENDER APLIKASI UTAMA ====================
@@ -686,71 +628,72 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
             
         st.write("") 
-        
         if st.button("📱 BUKA MODE HP", use_container_width=True, type="primary"):
             st.session_state.mode_aplikasi = "hp"
             st.rerun()
 
 else:
-    # --- JAVASCRIPT GLOBAL UNTUK KLIK TAB & LOMPAT KURSOR INSTAN ---
+    # --- JAVASCRIPT GLOBAL (OTAK PENGGERAK KURSOR ANTI GAGAL) ---
     components.html("""
         <script>
         const doc = window.parent.document;
-        
-        function tryFocusDirect(label) {
+
+        // Fungsi andalan: Mencari kotak input berdasarkan teks label di atasnya secara persis
+        function focusByLabelText(labelText) {
             setTimeout(() => {
-                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
-                if (inputToFocus) inputToFocus.focus();
-            }, 150);
+                const labels = Array.from(doc.querySelectorAll('label'));
+                const targetLabel = labels.find(l => l.innerText.trim() === labelText);
+                if (targetLabel) {
+                    const inputId = targetLabel.getAttribute('for');
+                    const input = doc.getElementById(inputId);
+                    if (input) input.focus();
+                }
+            }, 150); // Jeda kecil agar Streamlit selesai menggambar kotak
         }
 
-        if (!doc.getElementById('smart-focus-script')) {
+        if (!doc.getElementById('bulletproof-focus-script')) {
             const script = doc.createElement('script');
-            script.id = 'smart-focus-script';
+            script.id = 'bulletproof-focus-script';
             script.innerHTML = `
+                // 1. Logika Lompat Kursor Pakai tombol 'Enter'
                 document.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
                         const active = document.activeElement;
                         if (!active || active.tagName !== 'INPUT') return;
+
+                        const activeId = active.id;
+                        const labelEl = document.querySelector('label[for="' + activeId + '"]');
+                        if (!labelEl) return;
+
+                        const text = labelEl.innerText.trim();
+
+                        // Tab Input
+                        if (text === 'Masukkan Kode SKU:') focusByLabelText('Jumlah Stok:');
+                        else if (text === 'Jumlah Stok:') focusByLabelText('Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):');
                         
-                        const label = active.getAttribute('aria-label');
+                        // Tab Hapus
+                        else if (text === 'Masukkan Kode SKU yang akan dihapus:') focusByLabelText('Ketik Nama Rak Asal (Enter untuk Hapus Cepat):');
                         
-                        if (label === 'Masukkan Kode SKU:') {
-                            setTimeout(() => { const n = document.querySelector('input[aria-label="Jumlah Stok:"]'); if(n) n.focus(); }, 50);
-                        }
-                        else if (label === 'Jumlah Stok:') {
-                            setTimeout(() => { const n = document.querySelector('input[aria-label="Ketik Nama Rak Tujuan (Enter untuk Simpan Cepat):"]'); if(n) n.focus(); }, 50);
-                        }
-                        else if (label === 'Masukkan Kode SKU yang akan dihapus:') {
-                            setTimeout(() => { const n = document.querySelector('input[aria-label="Ketik Nama Rak Asal (Enter untuk Hapus Cepat):"]'); if(n) n.focus(); }, 50);
-                        }
-                        else if (label === 'Ketik Nama Rak Asal:') {
-                            setTimeout(() => { const n = document.querySelector('input[aria-label="Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"]'); if(n) n.focus(); }, 50);
-                        }
-                        else if (label === 'Nama Rak Asal:') {
-                            setTimeout(() => { const n = document.querySelector('input[aria-label="Kode SKU yang Dipindah:"]'); if(n) n.focus(); }, 50);
-                        }
-                        else if (label === 'Kode SKU yang Dipindah:') {
-                            setTimeout(() => { const n = document.querySelector('input[aria-label="Nama Rak Tujuan (Enter untuk Pindah):"]'); if(n) n.focus(); }, 50);
-                        }
+                        // Tab Ambil
+                        else if (text === 'Ketik Nama Rak Asal:') focusByLabelText('Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):');
+                        
+                        // Tab Mutasi
+                        else if (text === 'Nama Rak Asal:') focusByLabelText('Kode SKU yang Dipindah:');
+                        else if (text === 'Kode SKU yang Dipindah:') focusByLabelText('Nama Rak Tujuan (Enter untuk Pindah):');
                     }
                 }, true);
-                
+
+                // 2. Logika Otomatis Fokus Saat Klik Tab / Pindah Menu
                 document.addEventListener('click', function(e) {
-                    if(e.target.tagName === 'P' || e.target.tagName === 'DIV' || e.target.tagName === 'BUTTON') {
-                        const text = e.target.innerText;
-                        if(text.includes('Cari')) {
-                            tryFocusDirect('Masukkan Kode SKU atau Nama Rak:');
-                        } else if(text.includes('Input')) {
-                            tryFocusDirect('Masukkan Kode SKU:');
-                        } else if(text.includes('Hapus')) {
-                            tryFocusDirect('Masukkan Kode SKU yang akan dihapus:');
-                        } else if(text.includes('Ambil')) {
-                            tryFocusDirect('Ketik Nama Rak Asal:');
-                        } else if(text.includes('Mutasi')) {
-                            tryFocusDirect('Nama Rak Asal:');
-                        }
+                    let tabBtn = e.target.closest('[role="tab"]');
+                    if (tabBtn) {
+                        const tabText = tabBtn.innerText.trim();
+                        if (tabText.includes('Rak')) focusByLabelText('Nama Rak Baru:');
+                        else if (tabText.includes('Cari')) focusByLabelText('Masukkan Kode SKU atau Nama Rak:');
+                        else if (tabText.includes('Input')) focusByLabelText('Masukkan Kode SKU:');
+                        else if (tabText.includes('Hapus')) focusByLabelText('Masukkan Kode SKU yang akan dihapus:');
+                        else if (tabText.includes('Ambil')) focusByLabelText('Ketik Nama Rak Asal:');
+                        else if (tabText.includes('Mutasi')) focusByLabelText('Nama Rak Asal:');
                     }
                 }, true);
             `;
@@ -758,6 +701,26 @@ else:
         }
         </script>
     """, height=0, width=0)
+
+    # --- PEMBERI PERINTAH FOKUS DARI PYTHON (Setelah Tombol Disimpan/Dicari) ---
+    if "focus_target" in st.session_state and st.session_state.focus_target:
+        target_label = st.session_state.focus_target
+        components.html(f"""
+            <script>
+            const doc = window.parent.document;
+            setTimeout(() => {{
+                const labels = Array.from(doc.querySelectorAll('label'));
+                const targetLabel = labels.find(l => l.innerText.trim() === '{target_label}');
+                if (targetLabel) {{
+                    const inputId = targetLabel.getAttribute('for');
+                    const input = doc.getElementById(inputId);
+                    if (input) input.focus();
+                }}
+            }}, 200);
+            </script>
+        """, height=0, width=0)
+        st.session_state.focus_target = None
+
 
     col_judul, col_tombol = st.columns([4, 1])
     
