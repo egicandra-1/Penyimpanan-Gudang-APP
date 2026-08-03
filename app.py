@@ -657,7 +657,7 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
-    # --- SUNTIKAN JAVASCRIPT GLOBAL UNTUK KELOMPATAN KURSOR (TERMASUK AMBIL & MUTASI) ---
+    # --- SUNTIKAN JAVASCRIPT: PINDAH KURSOR OTOMATIS SAAT ENTER DIETIK DI SEMUA INPUT ---
     components.html("""
         <script>
         const doc = window.parent.document;
@@ -690,17 +690,21 @@ else:
                                 if (next) next.focus();
                             }, 50);
                         }
-                        // --- TAMBAHAN KELOMPATAN ENTER: TAB AMBIL ---
                         else if (label === 'Ketik Nama Rak Asal:') {
                             setTimeout(() => {
                                 const next = document.querySelector('input[aria-label="Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"]');
                                 if (next) next.focus();
                             }, 50);
                         }
-                        // --- TAMBAHAN KELOMPATAN ENTER: TAB MUTASI ---
                         else if (label === 'Nama Rak Asal:') {
                             setTimeout(() => {
                                 const next = document.querySelector('input[aria-label="Kode SKU yang Dipindah:"]');
+                                if (next) next.focus();
+                            }, 50);
+                        }
+                        else if (label === 'Kode SKU yang Dipindah:') {
+                            setTimeout(() => {
+                                const next = document.querySelector('input[aria-label="Nama Rak Tujuan:"]');
                                 if (next) next.focus();
                             }, 50);
                         }
