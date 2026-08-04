@@ -332,16 +332,27 @@ def ui_manajemen_rak():
         df_rak = []
         for r in rak_sorted:
             items = st.session_state.rak_gudang_tanpa_posisi[r]
+            
+            # --- PEMBARUAN KOLOM TABEL: Menyusun daftar SKU di dalam rak ---
+            sku_list = ", ".join([str(item["sku"]) for item in items]) if items else "-"
             sku_count = len(items)
             total_stok = sum(item["stok"] for item in items)
-            df_rak.append({"Nama Rak": r, "Total Item Berbeda": sku_count, "Total Stok Fisik": total_stok})
+            
+            # Memasukkan ke dalam array df_rak sesuai urutan yang Anda minta
+            df_rak.append({
+                "Nama Rak": r, 
+                "KODE SKU": sku_list, 
+                "Stok": total_stok,
+                "Total Item Berbeda": sku_count
+            })
             
         st.data_editor(
             df_rak,
             column_config={
                 "Nama Rak": st.column_config.TextColumn("Nama Rak", required=True),
-                "Total Item Berbeda": st.column_config.NumberColumn("Total Item Berbeda", disabled=True),
-                "Total Stok Fisik": st.column_config.NumberColumn("Total Stok Fisik", disabled=True)
+                "KODE SKU": st.column_config.TextColumn("KODE SKU", disabled=True),
+                "Stok": st.column_config.NumberColumn("Stok", disabled=True),
+                "Total Item Berbeda": st.column_config.NumberColumn("Total Item Berbeda", disabled=True)
             },
             use_container_width=True,
             num_rows="dynamic",
@@ -604,6 +615,7 @@ else:
             ui_input_barang()
         with tab4:
             ui_hapus_barang()
+
 
 # ==================== GLOBAL NOTIFICATION HANDLER (INSTAN) ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
