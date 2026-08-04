@@ -227,16 +227,14 @@ def on_enter_input_barang():
     stok = int(stok_raw)
     st.session_state.rak_gudang_tanpa_posisi[rak].append({"sku": sku, "stok": stok})
     
-    # Save seketika via robot siluman
     save_data_to_sheets()
     
     st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
     
-    # Refresh kotak dan lempar kursor kembali ke SKU awal
     st.session_state.input_version += 1
     st.session_state.focus_sku_after_save = True
 
-# ==================== CALLBACK TAB HAPUS ====================
+# ==================== CALLBACK TAB HAPUS (TUMPUKAN GRAVITASI) ====================
 def on_enter_hapus_barang():
     v = st.session_state.input_version
     sku_clean = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
@@ -250,10 +248,40 @@ def on_enter_hapus_barang():
     if rak_clean in st.session_state.rak_gudang_tanpa_posisi:
         rak_lama = st.session_state.rak_gudang_tanpa_posisi[rak_clean]
         filtered_rak = [item for item in rak_lama if item["sku"].lower() != sku_clean.lower()]
+        
         if len(filtered_rak) < len(rak_lama):
-            st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
+            # LOGIKA TUMPUKAN GRAVITASI (TURUN OTOMATIS)
+            parts = rak_clean.rsplit("-", 1)
+            pesan_tambahan = ""
+            
+            # Cek apakah format namanya adalah Grup-Lantai (contoh: A-1 atau B-SB-6)
+            if len(parts) == 2 and parts[1].isdigit():
+                group = parts[0]
+                deleted_floor = int(parts[1])
+                
+                current_floor = deleted_floor + 1
+                while True:
+                    next_rak = f"{group}-{current_floor}"
+                    curr_rak = f"{group}-{current_floor - 1}"
+                    
+                    if next_rak in st.session_state.rak_gudang_tanpa_posisi:
+                        # Pindahkan isi tumpukan atas ke tumpukan bawahnya
+                        st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
+                        current_floor += 1
+                    else:
+                        # Hapus tumpukan paling atas yang fisiknya sudah turun/hilang
+                        top_rak = f"{group}-{current_floor - 1}"
+                        if top_rak in st.session_state.rak_gudang_tanpa_posisi:
+                            del st.session_state.rak_gudang_tanpa_posisi[top_rak]
+                        break
+                pesan_tambahan = " Rak di atasnya otomatis turun."
+            else:
+                # Jika format bukan grup-lantai, kembalikan seperti biasa (hanya hapus isi SKU-nya)
+                st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
+                pesan_tambahan = ""
+
             save_data_to_sheets()
-            st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!"}
+            st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!{pesan_tambahan}"}
             
             st.session_state.input_version += 1
             st.session_state.focus_hapus_sku_after_save = True
@@ -423,257 +451,6 @@ def ui_hapus_barang():
             </script>
         """, height=0, width=0)
 
-def ui_ambil_barang():
-    st.markdown("### 📤 Pengurangan Stok (Deteksi Otomatis)")
-    placeholders["ambil"] = st.empty() 
-
-    if "scan_cart" not in st.session_state:
-        st.session_state.scan_cart = {} 
-
-    v = st.session_state.input_version
-    ambil_rak = st.text_input("Ketik Nama Rak Asal:", key=f"ambil_rak_field_{v}").strip()
-
-    def process_scanned_sku():
-        raw_val = st.session_state.quick_scan_input.strip()
-        if not raw_val: return
-
-        rak_terpilih = st.session_state.get(f"ambil_rak_field_{v}", "").strip()
-        
-        if not rak_terpilih:
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Ketik Nama Rak Asal terlebih dahulu sebelum scan!"}
-            st.session_state.quick_scan_input = ""
-            return
-            
-        if rak_terpilih not in st.session_state.rak_gudang_tanpa_posisi:
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{rak_terpilih}' tidak ditemukan!"}
-            st.session_state.quick_scan_input = ""
-            return
-
-        sku_terdeteksi = None
-        daftar_sku_rak = [item["sku"] for item in st.session_state.rak_gudang_tanpa_posisi[rak_terpilih]]
-        
-        for real_sku in daftar_sku_rak:
-            if raw_val.lower().endswith(real_sku.lower()):
-                sku_terdeteksi = real_sku
-                break
-        
-        if not sku_terdeteksi:
-            for real_sku in daftar_sku_rak:
-                if real_sku.lower() in raw_val.lower():
-                    sku_terdeteksi = real_sku
-                    break
-        
-        if not sku_terdeteksi:
-            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ DITOLAK! SKU tidak dikenali di rak '{rak_terpilih}'!"}
-            st.session_state.quick_scan_input = ""
-            return
-
-        jumlah_scan = 1
-
-        if sku_terdeteksi in st.session_state.scan_cart:
-            st.session_state.scan_cart[sku_terdeteksi] += jumlah_scan
-        else:
-            st.session_state.scan_cart[sku_terdeteksi] = jumlah_scan
-            
-        st.session_state[f"qty_num_{sku_terdeteksi}"] = st.session_state.scan_cart[sku_terdeteksi]
-        st.session_state.quick_scan_input = ""
-
-    st.text_input(
-        "Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):", 
-        key="quick_scan_input", 
-        on_change=process_scanned_sku,
-        placeholder="Arahkan scanner ke barcode..."
-    )
-
-    if st.session_state.scan_cart:
-        st.markdown("#### 🛒 Daftar Barang yang Akan Dikurangi:")
-        total_items = 0
-        
-        rak_aktif = st.session_state.get(f"ambil_rak_field_{v}", "").strip()
-        items_di_rak = st.session_state.rak_gudang_tanpa_posisi.get(rak_aktif, [])
-
-        for sku_item, qty in list(st.session_state.scan_cart.items()):
-            matching_items = [item for item in items_di_rak if item["sku"].lower() == sku_item.lower()]
-            
-            if len(matching_items) > 1:
-                col1, col2, col3, col4 = st.columns([1.5, 2.5, 1.5, 1])
-                with col1:
-                    st.write(f"📦 **{sku_item}**")
-                with col2:
-                    opsi_stok = [f"Stok Asal: {item['stok']}" for item in matching_items]
-                    st.selectbox("Pilih Target", opsi_stok, key=f"target_batch_{sku_item}", label_visibility="collapsed")
-                with col3:
-                    new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, key=f"qty_num_{sku_item}", label_visibility="collapsed")
-                    st.session_state.scan_cart[sku_item] = new_qty
-                with col4:
-                    if st.button("❌", key=f"del_{sku_item}"):
-                        del st.session_state.scan_cart[sku_item]
-                        if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
-                        if f"target_batch_{sku_item}" in st.session_state: del st.session_state[f"target_batch_{sku_item}"]
-                        st.rerun()
-            else:
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.write(f"📦 **{sku_item}**")
-                with col2:
-                    new_qty = st.number_input(f"Jumlah {sku_item}", min_value=1, key=f"qty_num_{sku_item}", label_visibility="collapsed")
-                    st.session_state.scan_cart[sku_item] = new_qty
-                with col3:
-                    if st.button("❌", key=f"del_{sku_item}"):
-                        del st.session_state.scan_cart[sku_item]
-                        if f"qty_num_{sku_item}" in st.session_state: del st.session_state[f"qty_num_{sku_item}"]
-                        st.rerun()
-            
-            total_items += st.session_state.scan_cart.get(sku_item, 0)
-
-        st.markdown(f"**Total Keseluruhan Stok yang Dikurangi:** {total_items} pcs")
-
-        st.text_input("Konfirmasi Eksekusi (Enter di sini):", key=f"trigger_konfirmasi_ambil_{v}", placeholder="Taruh kursor di sini, tekan Enter...")
-
-        c_b1, c_b2 = st.columns(2)
-        with c_b1:
-            btn_konfirmasi_ambil = st.button("✅ Konfirmasi Pengurangan Stok", use_container_width=True, type="primary")
-
-        if btn_konfirmasi_ambil or st.session_state.get(f"trigger_konfirmasi_ambil_{v}", ""):
-            st.session_state.rak_gudang_tanpa_posisi = load_data_from_sheets()
-            
-            if not ambil_rak:
-                st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": "❌ Nama Rak Asal harus diisi!"}
-                st.session_state.input_version += 1
-                st.rerun()
-            elif ambil_rak not in st.session_state.rak_gudang_tanpa_posisi:
-                st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Rak '{ambil_rak}' tidak terdaftar."}
-                st.session_state.input_version += 1
-                st.rerun()
-            else:
-                rak_items = st.session_state.rak_gudang_tanpa_posisi[ambil_rak]
-                berhasil = True
-                pesan_hasil = []
-
-                for sku_to_reduce, qty_to_reduce in st.session_state.scan_cart.items():
-                    matching_items_cek = [item for item in rak_items if sku_to_reduce.lower() == item["sku"].lower()]
-                    item_ditemukan = None
-                    
-                    if len(matching_items_cek) > 1:
-                        target_str = st.session_state.get(f"target_batch_{sku_to_reduce}")
-                        if target_str:
-                            target_stok = int(target_str.replace("Stok Asal: ", ""))
-                            item_ditemukan = next((item for item in matching_items_cek if item["stok"] == target_stok), None)
-                    elif len(matching_items_cek) == 1:
-                        item_ditemukan = matching_items_cek[0]
-                    
-                    if item_ditemukan:
-                        if qty_to_reduce > item_ditemukan["stok"]:
-                            st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ Gagal! Stok untuk SKU '{sku_to_reduce}' (Sisa: {item_ditemukan['stok']}) tidak cukup."}
-                            berhasil = False
-                            st.session_state.input_version += 1
-                            break
-                        elif qty_to_reduce == item_ditemukan["stok"]:
-                            rak_items.remove(item_ditemukan)
-                            pesan_hasil.append(f"SKU '{item_ditemukan['sku']}' (Isi {qty_to_reduce}) habis dihapus.")
-                        else:
-                            item_ditemukan["stok"] -= qty_to_reduce
-                            pesan_hasil.append(f"SKU '{item_ditemukan['sku']}' dikurangi {qty_to_reduce} pcs.")
-                    else:
-                        berhasil = False
-                        st.session_state.global_notif = {"tab": "ambil", "type": "error", "text": f"❌ SKU '{sku_to_reduce}' tidak ditemukan di rak '{ambil_rak}'."}
-                        st.session_state.input_version += 1
-                        break
-
-                if berhasil:
-                    save_data_to_sheets()
-                    st.session_state.global_notif = {"tab": "ambil", "type": "success", "text": "Berhasil! " + " | ".join(pesan_hasil)}
-                    for sku_item in list(st.session_state.scan_cart.keys()):
-                        if f"qty_num_{sku_item}" in st.session_state:
-                            del st.session_state[f"qty_num_{sku_item}"]
-                        if f"target_batch_{sku_item}" in st.session_state:
-                            del st.session_state[f"target_batch_{sku_item}"]
-                    st.session_state.scan_cart = {}
-                    st.session_state.input_version += 1
-                    st.rerun()
-                elif not berhasil:
-                    st.rerun()
-
-        with c_b2:
-            if st.button("🗑️ Reset Daftar", use_container_width=True):
-                for sku_item in list(st.session_state.scan_cart.keys()):
-                    if f"qty_num_{sku_item}" in st.session_state:
-                        del st.session_state[f"qty_num_{sku_item}"]
-                    if f"target_batch_{sku_item}" in st.session_state:
-                        del st.session_state[f"target_batch_{sku_item}"]
-                st.session_state.scan_cart = {}
-                st.session_state.input_version += 1
-                st.rerun()
-    else:
-        st.info("💡 Ketik nama rak dulu, lalu scan barcode Anda berulang kali di kotak atas.")
-
-def ui_mutasi_barang():
-    st.markdown("### 🔄 Mutasi (Pindah Rak)")
-    placeholders["mutasi"] = st.empty() 
-    
-    v = st.session_state.input_version
-
-    mutasi_asal = st.text_input("Nama Rak Asal:", key=f"mutasi_asal_input_{v}").strip()
-    mutasi_sku = st.text_input("Kode SKU yang Dipindah:", key=f"mutasi_sku_input_{v}").strip()
-    
-    item_terpilih = None
-    
-    if mutasi_asal and mutasi_sku:
-        if mutasi_asal in st.session_state.rak_gudang_tanpa_posisi:
-            items_di_rak = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
-            matching_items = [item for item in items_di_rak if item["sku"].lower() == mutasi_sku.lower()]
-            
-            if len(matching_items) > 1:
-                opsi_stok = [f"Stok Asal: {item['stok']}" for item in matching_items]
-                pilihan = st.selectbox("⚠️ Ditemukan SKU Kembar! Pilih kelompok mana yang mau dipindah:", opsi_stok, key=f"mutasi_dropdown_kembar_{v}")
-                target_stok = int(pilihan.replace("Stok Asal: ", ""))
-                item_terpilih = next((item for item in matching_items if item["stok"] == target_stok), None)
-                
-            elif len(matching_items) == 1:
-                item_terpilih = matching_items[0]
-                st.info(f"✅ SKU ditemukan! (Satu tumpukan dengan stok: {item_terpilih['stok']}) siap dipindah.")
-                
-            else:
-                st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": f"❌ SKU '{mutasi_sku}' tidak ada di rak '{mutasi_asal}'."}
-                st.session_state.input_version += 1
-                st.rerun()
-        else:
-            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": f"❌ Rak Asal '{mutasi_asal}' tidak valid atau belum dibuat."}
-            st.session_state.input_version += 1
-            st.rerun()
-
-    tujuan_rak = st.text_input("Nama Rak Tujuan:", key=f"mutasi_tujuan_input_{v}").strip()
-
-    if st.button("🔄 Pindah Rak", use_container_width=True, type="primary"):
-        if not mutasi_sku or not mutasi_asal or not tujuan_rak:
-            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ SKU, Rak Asal, dan Rak Tujuan wajib diisi."}
-            st.session_state.input_version += 1
-            st.rerun()
-        elif tujuan_rak not in st.session_state.rak_gudang_tanpa_posisi:
-            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak Tujuan tidak valid/belum dibuat."}
-            st.session_state.input_version += 1
-            st.rerun()
-        elif mutasi_asal == tujuan_rak:
-            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Rak tujuan tidak boleh sama dengan rak asal."}
-            st.session_state.input_version += 1
-            st.rerun()
-        elif item_terpilih:
-            rak_asal_items = st.session_state.rak_gudang_tanpa_posisi[mutasi_asal]
-            stok_yang_ikut = item_terpilih["stok"]
-            sku_asli = item_terpilih["sku"]
-            
-            rak_asal_items.remove(item_terpilih)
-            st.session_state.rak_gudang_tanpa_posisi[tujuan_rak].append({"sku": sku_asli, "stok": stok_yang_ikut})
-            save_data_to_sheets()
-            
-            st.session_state.global_notif = {"tab": "mutasi", "type": "success", "text": f"Berhasil memindah SKU '{sku_asli}' (Stok: {stok_yang_ikut}) ke '{tujuan_rak}'."}
-            st.session_state.input_version += 1
-            st.rerun()
-        else:
-            st.session_state.global_notif = {"tab": "mutasi", "type": "error", "text": "❌ Proses dibatalkan. Pastikan SKU dan Rak Asal sudah benar."}
-            st.session_state.input_version += 1
-            st.rerun()
-
 # ==================== RENDER APLIKASI UTAMA ====================
 
 if st.session_state.mode_aplikasi is None:
@@ -726,24 +503,6 @@ else:
                         else if (label === 'Masukkan Kode SKU yang akan dihapus:') {
                             setTimeout(() => {
                                 const next = document.querySelector('input[aria-label="Ketik Nama Rak Asal (Enter untuk Hapus Cepat):"]');
-                                if (next) next.focus();
-                            }, 50);
-                        }
-                        else if (label === 'Ketik Nama Rak Asal:') {
-                            setTimeout(() => {
-                                const next = document.querySelector('input[aria-label="Scan Kode SKU (Otomatis mendeteksi SKU & menambah jumlah):"]');
-                                if (next) next.focus();
-                            }, 50);
-                        }
-                        else if (label === 'Nama Rak Asal:') {
-                            setTimeout(() => {
-                                const next = document.querySelector('input[aria-label="Kode SKU yang Dipindah:"]');
-                                if (next) next.focus();
-                            }, 50);
-                        }
-                        else if (label === 'Kode SKU yang Dipindah:') {
-                            setTimeout(() => {
-                                const next = document.querySelector('input[aria-label="Nama Rak Tujuan:"]');
                                 if (next) next.focus();
                             }, 50);
                         }
@@ -803,12 +562,8 @@ else:
             ui_input_barang()
             st.markdown("---")
             ui_hapus_barang()
-            st.markdown("---")
-            ui_ambil_barang()
-            st.markdown("---")
-            ui_mutasi_barang()
     else:
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "❌ Hapus", "📤 Ambil", "🔄 Mutasi"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "❌ Hapus"])
         
         with tab1:
             ui_manajemen_rak()
@@ -818,10 +573,6 @@ else:
             ui_input_barang()
         with tab4:
             ui_hapus_barang()
-        with tab5:
-            ui_ambil_barang()
-        with tab6:
-            ui_mutasi_barang()
 
 
 # ==================== GLOBAL NOTIFICATION HANDLER (INSTAN) ====================
