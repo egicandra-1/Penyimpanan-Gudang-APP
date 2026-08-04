@@ -13,33 +13,43 @@ st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", l
 if st.session_state.get("mode_aplikasi") == "hp":
     st.markdown("""
         <style>
-        /* 1. KIOSK MODE: Sembunyikan header, footer, dan menu bawaan web */
-        #MainMenu {visibility: hidden;}
-        header {visibility: hidden;}
-        footer {visibility: hidden;}
-        .block-container {padding-top: 1rem; padding-bottom: 1rem;}
+        /* 1. KIOSK MODE: Sembunyikan header, garis dekorasi, dan menu Streamlit sepenuhnya */
+        [data-testid="stHeader"] {display: none !important;}
+        [data-testid="stDecoration"] {display: none !important;}
+        [data-testid="stToolbar"] {display: none !important;}
+        .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
         
-        /* 2. TAB RAKSASA: Perbesar ukuran Tab menu agar mudah dipencet jari */
+        /* 2. TAB RAKSASA: Perbesar ukuran kotak dan teks Tab */
         button[data-baseweb="tab"] {
-            font-size: 18px !important;
-            font-weight: bold !important;
             padding-top: 15px !important;
             padding-bottom: 15px !important;
         }
-        
-        /* 3. INPUT RAKSASA: Perbesar ukuran teks di dalam kolom input */
-        input[type="text"], input[type="number"] {
+        button[data-baseweb="tab"] p {
             font-size: 20px !important;
-            padding: 15px !important;
+            font-weight: 800 !important;
         }
         
-        /* 4. TOMBOL RAKSASA: Perbesar tombol eksekusi utama */
-        .stButton > button {
+        /* 3. INPUT RAKSASA: Perbesar ukuran label judul dan kotak isian */
+        [data-testid="stTextInput"] label p, [data-testid="stSelectbox"] label p {
             font-size: 18px !important;
             font-weight: bold !important;
-            padding: 20px !important;
-            border-radius: 10px !important;
-            border: 2px solid #ccc !important;
+        }
+        [data-testid="stTextInput"] input {
+            font-size: 22px !important;
+            padding: 15px !important;
+            height: 60px !important;
+        }
+        
+        /* 4. TOMBOL RAKSASA: Perbesar tombol eksekusi utama dan teks di dalamnya */
+        .stButton > button {
+            height: 70px !important;
+            border-radius: 12px !important;
+            border: 2px solid #aaa !important;
+            background-color: #f8f9fa !important;
+        }
+        .stButton > button p {
+            font-size: 22px !important;
+            font-weight: 800 !important;
         }
         </style>
     """, unsafe_allow_html=True)
