@@ -378,31 +378,16 @@ def ui_pencarian_visual():
 
         if hasil_cari:
             st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan untuk pencarian '{query}':")
+            # --- RENDER KILAT: Menggunakan teks Markdown instan daripada st.info ---
             for hasil in hasil_cari:
-                st.info(f"📦 SKU: **`{hasil['sku_penuh']}`** 📍 Rak: **{hasil['rak']}** (Stok: {hasil['stok']})")
+                st.markdown(f"📦 SKU: **`{hasil['sku_penuh']}`** &nbsp;&nbsp;|&nbsp;&nbsp; 📍 Rak: **{hasil['rak']}** &nbsp;&nbsp;|&nbsp;&nbsp; 🔢 Stok: **{hasil['stok']}**")
         else:
             st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
-
-    st.markdown("---")
-    st.markdown("### 📊 Visualisasi Isi Rak")
-    if not st.session_state.rak_gudang_tanpa_posisi:
-        st.info("Belum ada rak yang terdaftar.")
-    else:
-        rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
-        for r_nama in rak_sorted_visual:
-            daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
-            st.markdown(f"#### 📁 {r_nama}")
-            if not daftar_item:
-                st.error("⬜ *RAK KOSONG*")
-            else:
-                cols = st.columns(min(len(daftar_item), 4) if len(daftar_item) > 0 else 1)
-                for idx, item in enumerate(daftar_item):
-                    with cols[idx % 4]:
-                        st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
                         
     if target_focus:
+        # --- ID WAKTU DINAMIS: Memaksa Streamlit mereset kursor pada Tab Cari ---
         components.html(f"""
-            <script>
+            <script id="focus-search-{time.time()}">
             const doc = window.parent.document;
             function tryFocus(label, attempts) {{
                 if (attempts <= 0) return;
@@ -440,8 +425,9 @@ def ui_input_barang():
     st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
 
     if target_focus:
+        # --- ID WAKTU DINAMIS ---
         components.html(f"""
-            <script>
+            <script id="focus-input-{time.time()}">
             const doc = window.parent.document;
             function tryFocus(label, attempts) {{
                 if (attempts <= 0) return;
@@ -478,8 +464,9 @@ def ui_hapus_barang():
     st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
 
     if target_focus:
+        # --- ID WAKTU DINAMIS ---
         components.html(f"""
-            <script>
+            <script id="focus-hapus-{time.time()}">
             const doc = window.parent.document;
             function tryFocus(label, attempts) {{
                 if (attempts <= 0) return;
@@ -617,7 +604,6 @@ else:
             ui_input_barang()
         with tab4:
             ui_hapus_barang()
-
 
 # ==================== GLOBAL NOTIFICATION HANDLER (INSTAN) ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
