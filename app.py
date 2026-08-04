@@ -9,51 +9,55 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
 
-# ==================== SUNTIKAN UI/UX KIOSK (HANYA AKTIF DI MODE HP) ====================
+# ==================== SUNTIKAN UI/UX BOTTOM NAVIGATION (KHUSUS MODE HP) ====================
 if st.session_state.get("mode_aplikasi") == "hp":
     st.markdown("""
         <style>
-        /* 1. KIOSK MODE: Sembunyikan header, garis dekorasi, dan menu Streamlit sepenuhnya */
+        /* 1. KIOSK MODE: Membersihkan layar dari menu web bawaan agar fokus */
         [data-testid="stHeader"] {display: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         [data-testid="stToolbar"] {display: none !important;}
-        .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
         
-        /* 2. TAB RAKSASA: Perbesar ukuran kotak dan teks Tab */
+        /* 2. BOTTOM NAV: Menarik area Tab asli ke paling bawah layar */
+        div[data-testid="stTabs"] > div:first-child {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            background-color: #ffffff !important;
+            z-index: 99999 !important;
+            border-top: 1px solid #ddd !important;
+            padding: 5px 0px 15px 0px !important;
+            display: flex !important;
+            justify-content: space-around !important;
+            box-shadow: 0px -4px 10px rgba(0,0,0,0.05) !important;
+        }
+        
+        /* Membagi tombol tab agar rata dan mudah ditekan jempol */
         button[data-baseweb="tab"] {
-            padding-top: 15px !important;
-            padding-bottom: 15px !important;
-        }
-        button[data-baseweb="tab"] p {
-            font-size: 20px !important;
-            font-weight: 800 !important;
+            flex: 1 !important;
+            justify-content: center !important;
+            margin: 0 !important;
+            padding: 10px 0px !important;
         }
         
-        /* 3. INPUT RAKSASA: Perbesar ukuran label judul dan kotak isian */
-        [data-testid="stTextInput"] label p, [data-testid="stSelectbox"] label p {
-            font-size: 18px !important;
-            font-weight: bold !important;
-        }
-        [data-testid="stTextInput"] input {
-            font-size: 22px !important;
-            padding: 15px !important;
-            height: 60px !important;
+        /* 3. HIGHLIGHT: Pindahkan garis aktif tab ke bagian atas tombol */
+        div[data-baseweb="tab-highlight"] {
+            top: 0 !important;
+            bottom: auto !important;
+            height: 3px !important;
+            background-color: #ff4b4b !important;
+            border-radius: 0px 0px 4px 4px !important;
         }
         
-        /* 4. TOMBOL RAKSASA: Perbesar tombol eksekusi utama dan teks di dalamnya */
-        .stButton > button {
-            height: 70px !important;
-            border-radius: 12px !important;
-            border: 2px solid #aaa !important;
-            background-color: #f8f9fa !important;
-        }
-        .stButton > button p {
-            font-size: 22px !important;
-            font-weight: 800 !important;
+        /* 4. SPACER: Beri jarak di bagian bawah konten agar tidak tertutup Bottom Nav */
+        .block-container {
+            padding-bottom: 80px !important;
+            padding-top: 1rem !important;
         }
         </style>
     """, unsafe_allow_html=True)
-# ====================================================================================
+# ============================================================================================
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -620,33 +624,11 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
     tab_aktif = notif["tab"]
     
     if tab_aktif in placeholders:
-        # TAMPILAN RAKSASA UNTUK MODE HP
-        if st.session_state.get("mode_aplikasi") == "hp":
-            if notif["type"] == "success":
-                placeholders[tab_aktif].markdown(f"""
-                    <div style="background-color: #d4edda; color: #155724; padding: 25px; border-radius: 12px; border: 3px solid #c3e6cb; font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px;">
-                        {notif["text"]}
-                    </div>
-                """, unsafe_allow_html=True)
-            elif notif["type"] == "error":
-                placeholders[tab_aktif].markdown(f"""
-                    <div style="background-color: #f8d7da; color: #721c24; padding: 25px; border-radius: 12px; border: 3px solid #f5c6cb; font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px;">
-                        {notif["text"]}
-                    </div>
-                """, unsafe_allow_html=True)
-            elif notif["type"] == "warning":
-                placeholders[tab_aktif].markdown(f"""
-                    <div style="background-color: #fff3cd; color: #856404; padding: 25px; border-radius: 12px; border: 3px solid #ffeeba; font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px;">
-                        {notif["text"]}
-                    </div>
-                """, unsafe_allow_html=True)
-        # TAMPILAN STANDAR (NORMAL) UNTUK MODE KOMPUTER
-        else:
-            if notif["type"] == "success":
-                placeholders[tab_aktif].success(notif["text"])
-            elif notif["type"] == "error":
-                placeholders[tab_aktif].error(notif["text"])
-            elif notif["type"] == "warning":
-                placeholders[tab_aktif].warning(notif["text"])
+        if notif["type"] == "success":
+            placeholders[tab_aktif].success(notif["text"])
+        elif notif["type"] == "error":
+            placeholders[tab_aktif].error(notif["text"])
+        elif notif["type"] == "warning":
+            placeholders[tab_aktif].warning(notif["text"])
     
     st.session_state.global_notif = None
