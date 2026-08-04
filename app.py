@@ -125,6 +125,9 @@ if "mode_aplikasi" not in st.session_state:
 
 if "input_version" not in st.session_state:
     st.session_state.input_version = 0
+    
+if "last_search_query" not in st.session_state:
+    st.session_state.last_search_query = ""
 
 # ==================== CALLBACK TAMBAH RAK (ANTI TUMPANG TINDIH) ====================
 def on_enter_tambah_rak():
@@ -201,6 +204,15 @@ def proses_perubahan_tabel_rak():
     if needs_save and not ada_error:
         save_data_to_sheets()
         st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!"}
+        
+# ==================== CALLBACK TAB CARI ====================
+def on_enter_search():
+    v = st.session_state.input_version
+    query = st.session_state.get(f"main_search_input_{v}", "").strip()
+    if query:
+        st.session_state.last_search_query = query
+    st.session_state.input_version += 1
+    st.session_state.focus_search_after_save = True
 
 # ==================== CALLBACK TAB INPUT ====================
 def on_enter_input_barang():
@@ -339,23 +351,37 @@ def ui_manajemen_rak():
 
 def ui_pencarian_visual():
     st.markdown("### 🔍 Pencarian Barang / Rak")
-    search_query = st.text_input("Masukkan Kode SKU atau Nama Rak:", placeholder="Contoh: ketik 'mj', '459', atau 'A-1'...", key="main_search_input").strip()
+    
+    v = st.session_state.input_version
+    target_focus = None
+    if st.session_state.get("focus_search_after_save", False):
+        target_focus = "Masukkan Kode SKU atau Nama Rak:"
+        st.session_state.focus_search_after_save = False
 
-    if search_query:
+    st.text_input(
+        "Masukkan Kode SKU atau Nama Rak:", 
+        placeholder="Contoh: ketik 'mj', '459', atau 'A-1'...", 
+        key=f"main_search_input_{v}",
+        on_change=on_enter_search
+    )
+
+    query = st.session_state.get("last_search_query", "")
+    
+    if query:
         hasil_cari = []
         for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
-            rak_cocok = search_query.lower() in nama_rak.lower()
+            rak_cocok = query.lower() in nama_rak.lower()
             for item in daftar_item:
-                sku_cocok = search_query.lower() in item["sku"].lower()
+                sku_cocok = query.lower() in item["sku"].lower()
                 if rak_cocok or sku_cocok:
                     hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
 
         if hasil_cari:
-            st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan:")
+            st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan untuk pencarian '{query}':")
             for hasil in hasil_cari:
                 st.info(f"📦 SKU: **`{hasil['sku_penuh']}`** 📍 Rak: **{hasil['rak']}** (Stok: {hasil['stok']})")
         else:
-            st.error(f"❌ Tidak ada hasil untuk '{search_query}' pada SKU maupun Nama Rak manapun.")
+            st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
 
     st.markdown("---")
     st.markdown("### 📊 Visualisasi Isi Rak")
@@ -373,6 +399,24 @@ def ui_pencarian_visual():
                 for idx, item in enumerate(daftar_item):
                     with cols[idx % 4]:
                         st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
+                        
+    if target_focus:
+        components.html(f"""
+            <script>
+            const doc = window.parent.document;
+            function tryFocus(label, attempts) {{
+                if (attempts <= 0) return;
+                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
+                if (inputToFocus) {{
+                    setTimeout(() => inputToFocus.focus(), 50);
+                }} else {{
+                    setTimeout(() => tryFocus(label, attempts - 1), 100);
+                }}
+            }}
+            tryFocus('{target_focus}', 15);
+            </script>
+        """, height=0, width=0)
 
 def ui_input_barang():
     st.markdown("### 📝 Input / Update ke Rak")
