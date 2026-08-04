@@ -9,6 +9,42 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
 
+# ==================== SUNTIKAN UI/UX KIOSK (HANYA AKTIF DI MODE HP) ====================
+if st.session_state.get("mode_aplikasi") == "hp":
+    st.markdown("""
+        <style>
+        /* 1. KIOSK MODE: Sembunyikan header, footer, dan menu bawaan web */
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        .block-container {padding-top: 1rem; padding-bottom: 1rem;}
+        
+        /* 2. TAB RAKSASA: Perbesar ukuran Tab menu agar mudah dipencet jari */
+        button[data-baseweb="tab"] {
+            font-size: 18px !important;
+            font-weight: bold !important;
+            padding-top: 15px !important;
+            padding-bottom: 15px !important;
+        }
+        
+        /* 3. INPUT RAKSASA: Perbesar ukuran teks di dalam kolom input */
+        input[type="text"], input[type="number"] {
+            font-size: 20px !important;
+            padding: 15px !important;
+        }
+        
+        /* 4. TOMBOL RAKSASA: Perbesar tombol eksekusi utama */
+        .stButton > button {
+            font-size: 18px !important;
+            font-weight: bold !important;
+            padding: 20px !important;
+            border-radius: 10px !important;
+            border: 2px solid #ccc !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+# ====================================================================================
+
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -250,11 +286,9 @@ def on_enter_hapus_barang():
         filtered_rak = [item for item in rak_lama if item["sku"].lower() != sku_clean.lower()]
         
         if len(filtered_rak) < len(rak_lama):
-            # LOGIKA TUMPUKAN GRAVITASI (TURUN OTOMATIS)
             parts = rak_clean.rsplit("-", 1)
             pesan_tambahan = ""
             
-            # Cek apakah format namanya adalah Grup-Lantai (contoh: A-1 atau B-SB-6)
             if len(parts) == 2 and parts[1].isdigit():
                 group = parts[0]
                 deleted_floor = int(parts[1])
@@ -265,18 +299,15 @@ def on_enter_hapus_barang():
                     curr_rak = f"{group}-{current_floor - 1}"
                     
                     if next_rak in st.session_state.rak_gudang_tanpa_posisi:
-                        # Pindahkan isi tumpukan atas ke tumpukan bawahnya
                         st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
                         current_floor += 1
                     else:
-                        # Hapus tumpukan paling atas yang fisiknya sudah turun/hilang
                         top_rak = f"{group}-{current_floor - 1}"
                         if top_rak in st.session_state.rak_gudang_tanpa_posisi:
                             del st.session_state.rak_gudang_tanpa_posisi[top_rak]
                         break
-                pesan_tambahan = " Rak di atasnya otomatis turun."
+                pesan_tambahan = "<br>⬇️ <i>Tumpukan rak di atasnya telah turun otomatis.</i>"
             else:
-                # Jika format bukan grup-lantai, kembalikan seperti biasa (hanya hapus isi SKU-nya)
                 st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
                 pesan_tambahan = ""
 
@@ -307,7 +338,7 @@ def ui_manajemen_rak():
         on_change=on_enter_tambah_rak,
         placeholder="Scan Barcode / Ketik lalu tekan Enter..."
     )
-    st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak)
+    st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak, use_container_width=True)
 
     st.markdown("---")
     st.markdown("#### 📋 Database Rak")
@@ -528,15 +559,14 @@ else:
         </script>
     """, height=0, width=0)
 
-    # --- STRUKTUR UTAMA TETAP 100% PERSIS SEPERTI SEMULA ---
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
-        st.markdown("<h1>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
+        st.markdown("<h1>📦 Sistem Gudang</h1>", unsafe_allow_html=True)
         
     with col_tombol:
         st.write("") 
-        if st.button("🔄 Ganti Perangkat", use_container_width=True):
+        if st.button("🔄 Keluar", use_container_width=True):
             st.session_state.mode_aplikasi = None
             st.rerun()
             
@@ -574,18 +604,39 @@ else:
         with tab4:
             ui_hapus_barang()
 
-
-# ==================== GLOBAL NOTIFICATION HANDLER (INSTAN) ====================
+# ==================== GLOBAL NOTIFICATION HANDLER ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
     
     if tab_aktif in placeholders:
-        if notif["type"] == "success":
-            placeholders[tab_aktif].success(notif["text"])
-        elif notif["type"] == "error":
-            placeholders[tab_aktif].error(notif["text"])
-        elif notif["type"] == "warning":
-            placeholders[tab_aktif].warning(notif["text"])
+        # TAMPILAN RAKSASA UNTUK MODE HP
+        if st.session_state.get("mode_aplikasi") == "hp":
+            if notif["type"] == "success":
+                placeholders[tab_aktif].markdown(f"""
+                    <div style="background-color: #d4edda; color: #155724; padding: 25px; border-radius: 12px; border: 3px solid #c3e6cb; font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px;">
+                        {notif["text"]}
+                    </div>
+                """, unsafe_allow_html=True)
+            elif notif["type"] == "error":
+                placeholders[tab_aktif].markdown(f"""
+                    <div style="background-color: #f8d7da; color: #721c24; padding: 25px; border-radius: 12px; border: 3px solid #f5c6cb; font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px;">
+                        {notif["text"]}
+                    </div>
+                """, unsafe_allow_html=True)
+            elif notif["type"] == "warning":
+                placeholders[tab_aktif].markdown(f"""
+                    <div style="background-color: #fff3cd; color: #856404; padding: 25px; border-radius: 12px; border: 3px solid #ffeeba; font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px;">
+                        {notif["text"]}
+                    </div>
+                """, unsafe_allow_html=True)
+        # TAMPILAN STANDAR (NORMAL) UNTUK MODE KOMPUTER
+        else:
+            if notif["type"] == "success":
+                placeholders[tab_aktif].success(notif["text"])
+            elif notif["type"] == "error":
+                placeholders[tab_aktif].error(notif["text"])
+            elif notif["type"] == "warning":
+                placeholders[tab_aktif].warning(notif["text"])
     
     st.session_state.global_notif = None
