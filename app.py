@@ -9,56 +9,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Sistem Manajemen Rak Gudang", page_icon="📦", layout="wide")
 
-# ==================== SUNTIKAN UI/UX BOTTOM NAVIGATION (KHUSUS MODE HP) ====================
-if st.session_state.get("mode_aplikasi") == "hp":
-    st.markdown("""
-        <style>
-        /* 1. KIOSK MODE: Membersihkan layar dari menu web bawaan agar fokus */
-        [data-testid="stHeader"] {display: none !important;}
-        [data-testid="stDecoration"] {display: none !important;}
-        [data-testid="stToolbar"] {display: none !important;}
-        
-        /* 2. BOTTOM NAV: Menarik area Tab asli ke paling bawah layar */
-        div[data-testid="stTabs"] > div:first-child {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            background-color: #ffffff !important;
-            z-index: 99999 !important;
-            border-top: 1px solid #ddd !important;
-            padding: 5px 0px 15px 0px !important;
-            display: flex !important;
-            justify-content: space-around !important;
-            box-shadow: 0px -4px 10px rgba(0,0,0,0.05) !important;
-        }
-        
-        /* Membagi tombol tab agar rata dan mudah ditekan jempol */
-        button[data-baseweb="tab"] {
-            flex: 1 !important;
-            justify-content: center !important;
-            margin: 0 !important;
-            padding: 10px 0px !important;
-        }
-        
-        /* 3. HIGHLIGHT: Pindahkan garis aktif tab ke bagian atas tombol */
-        div[data-baseweb="tab-highlight"] {
-            top: 0 !important;
-            bottom: auto !important;
-            height: 3px !important;
-            background-color: #ff4b4b !important;
-            border-radius: 0px 0px 4px 4px !important;
-        }
-        
-        /* 4. SPACER: Beri jarak di bagian bawah konten agar tidak tertutup Bottom Nav */
-        .block-container {
-            padding-bottom: 80px !important;
-            padding-top: 1rem !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-# ============================================================================================
-
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -554,10 +504,10 @@ else:
                     }
                 }, true);
 
-                // --- LOMPAT KURSOR OTOMATIS SAAT PINDAH TAB ---
+                // --- LOMPAT KURSOR OTOMATIS SAAT PINDAH HALAMAN / KLIK TOMBOL ---
                 document.addEventListener('click', function(e) {
-                    const tabNode = e.target.closest('button[data-baseweb="tab"]') || e.target.closest('[role="tab"]');
-                    if (tabNode) {
+                    const btnNode = e.target.closest('button');
+                    if (btnNode) {
                         setTimeout(() => {
                             const inputs = Array.from(document.querySelectorAll('input[type="text"], input[type="number"]'));
                             const visibleInput = inputs.find(el => el.offsetParent !== null && !el.disabled);
@@ -606,17 +556,49 @@ else:
             ui_input_barang()
             st.markdown("---")
             ui_hapus_barang()
-    else:
-        tab1, tab2, tab3, tab4 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "❌ Hapus"])
-        
-        with tab1:
-            ui_manajemen_rak()
-        with tab2:
-            ui_pencarian_visual()
-        with tab3:
-            ui_input_barang()
-        with tab4:
-            ui_hapus_barang()
+            
+    # ==================== LAYOUT DASHBOARD MODE HP (IDAMAN ANDA) ====================
+    else: 
+        if "halaman_aktif_hp" not in st.session_state:
+            st.session_state.halaman_aktif_hp = "menu_utama"
+            
+        if st.session_state.halaman_aktif_hp == "menu_utama":
+            st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>Pilih Menu Aktivitas:</h3>", unsafe_allow_html=True)
+            
+            if st.button("🗄️ Manajemen Rak", use_container_width=True, type="primary"):
+                st.session_state.halaman_aktif_hp = "rak"
+                st.rerun()
+            st.write("")
+            
+            if st.button("🔍 Cari Barang", use_container_width=True, type="primary"):
+                st.session_state.halaman_aktif_hp = "cari"
+                st.rerun()
+            st.write("")
+            
+            if st.button("📝 Input Barang", use_container_width=True, type="primary"):
+                st.session_state.halaman_aktif_hp = "input"
+                st.rerun()
+            st.write("")
+            
+            if st.button("❌ Hapus & Turunkan Rak", use_container_width=True, type="primary"):
+                st.session_state.halaman_aktif_hp = "hapus"
+                st.rerun()
+                
+        else:
+            # Tombol kembali ke menu utama diletakkan di paling atas halaman
+            if st.button("🔙 Kembali ke Menu Utama", use_container_width=True):
+                st.session_state.halaman_aktif_hp = "menu_utama"
+                st.rerun()
+            st.divider()
+            
+            if st.session_state.halaman_aktif_hp == "rak":
+                ui_manajemen_rak()
+            elif st.session_state.halaman_aktif_hp == "cari":
+                ui_pencarian_visual()
+            elif st.session_state.halaman_aktif_hp == "input":
+                ui_input_barang()
+            elif st.session_state.halaman_aktif_hp == "hapus":
+                ui_hapus_barang()
 
 # ==================== GLOBAL NOTIFICATION HANDLER ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
