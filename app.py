@@ -250,9 +250,11 @@ def on_enter_hapus_barang():
         filtered_rak = [item for item in rak_lama if item["sku"].lower() != sku_clean.lower()]
         
         if len(filtered_rak) < len(rak_lama):
+            # LOGIKA TUMPUKAN GRAVITASI (TURUN OTOMATIS)
             parts = rak_clean.rsplit("-", 1)
             pesan_tambahan = ""
             
+            # Cek apakah format namanya adalah Grup-Lantai (contoh: A-1 atau B-SB-6)
             if len(parts) == 2 and parts[1].isdigit():
                 group = parts[0]
                 deleted_floor = int(parts[1])
@@ -263,15 +265,18 @@ def on_enter_hapus_barang():
                     curr_rak = f"{group}-{current_floor - 1}"
                     
                     if next_rak in st.session_state.rak_gudang_tanpa_posisi:
+                        # Pindahkan isi tumpukan atas ke tumpukan bawahnya
                         st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
                         current_floor += 1
                     else:
+                        # Hapus tumpukan paling atas yang fisiknya sudah turun/hilang
                         top_rak = f"{group}-{current_floor - 1}"
                         if top_rak in st.session_state.rak_gudang_tanpa_posisi:
                             del st.session_state.rak_gudang_tanpa_posisi[top_rak]
                         break
-                pesan_tambahan = "<br>⬇️ <i>Tumpukan rak di atasnya telah turun otomatis.</i>"
+                pesan_tambahan = " Rak di atasnya otomatis turun."
             else:
+                # Jika format bukan grup-lantai, kembalikan seperti biasa (hanya hapus isi SKU-nya)
                 st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
                 pesan_tambahan = ""
 
@@ -302,7 +307,7 @@ def ui_manajemen_rak():
         on_change=on_enter_tambah_rak,
         placeholder="Scan Barcode / Ketik lalu tekan Enter..."
     )
-    st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak, use_container_width=True)
+    st.button("Tambah Rak Manual", on_click=on_enter_tambah_rak)
 
     st.markdown("---")
     st.markdown("#### 📋 Database Rak")
@@ -504,10 +509,10 @@ else:
                     }
                 }, true);
 
-                // --- LOMPAT KURSOR OTOMATIS SAAT PINDAH HALAMAN / KLIK TOMBOL ---
+                // --- LOMPAT KURSOR OTOMATIS SAAT PINDAH TAB ---
                 document.addEventListener('click', function(e) {
-                    const btnNode = e.target.closest('button');
-                    if (btnNode) {
+                    const tabNode = e.target.closest('button[data-baseweb="tab"]') || e.target.closest('[role="tab"]');
+                    if (tabNode) {
                         setTimeout(() => {
                             const inputs = Array.from(document.querySelectorAll('input[type="text"], input[type="number"]'));
                             const visibleInput = inputs.find(el => el.offsetParent !== null && !el.disabled);
@@ -523,14 +528,15 @@ else:
         </script>
     """, height=0, width=0)
 
+    # --- STRUKTUR UTAMA TETAP 100% PERSIS SEPERTI SEMULA ---
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
-        st.markdown("<h1>📦 Sistem Gudang</h1>", unsafe_allow_html=True)
+        st.markdown("<h1>📦 Sistem Manajemen Rak Gudang</h1>", unsafe_allow_html=True)
         
     with col_tombol:
         st.write("") 
-        if st.button("🔄 Keluar", use_container_width=True):
+        if st.button("🔄 Ganti Perangkat", use_container_width=True):
             st.session_state.mode_aplikasi = None
             st.rerun()
             
@@ -556,51 +562,20 @@ else:
             ui_input_barang()
             st.markdown("---")
             ui_hapus_barang()
-            
-    # ==================== LAYOUT DASHBOARD MODE HP (IDAMAN ANDA) ====================
-    else: 
-        if "halaman_aktif_hp" not in st.session_state:
-            st.session_state.halaman_aktif_hp = "menu_utama"
-            
-        if st.session_state.halaman_aktif_hp == "menu_utama":
-            st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>Pilih Menu Aktivitas:</h3>", unsafe_allow_html=True)
-            
-            if st.button("🗄️ Manajemen Rak", use_container_width=True, type="primary"):
-                st.session_state.halaman_aktif_hp = "rak"
-                st.rerun()
-            st.write("")
-            
-            if st.button("🔍 Cari Barang", use_container_width=True, type="primary"):
-                st.session_state.halaman_aktif_hp = "cari"
-                st.rerun()
-            st.write("")
-            
-            if st.button("📝 Input Barang", use_container_width=True, type="primary"):
-                st.session_state.halaman_aktif_hp = "input"
-                st.rerun()
-            st.write("")
-            
-            if st.button("❌ Hapus & Turunkan Rak", use_container_width=True, type="primary"):
-                st.session_state.halaman_aktif_hp = "hapus"
-                st.rerun()
-                
-        else:
-            # Tombol kembali ke menu utama diletakkan di paling atas halaman
-            if st.button("🔙 Kembali ke Menu Utama", use_container_width=True):
-                st.session_state.halaman_aktif_hp = "menu_utama"
-                st.rerun()
-            st.divider()
-            
-            if st.session_state.halaman_aktif_hp == "rak":
-                ui_manajemen_rak()
-            elif st.session_state.halaman_aktif_hp == "cari":
-                ui_pencarian_visual()
-            elif st.session_state.halaman_aktif_hp == "input":
-                ui_input_barang()
-            elif st.session_state.halaman_aktif_hp == "hapus":
-                ui_hapus_barang()
+    else:
+        tab1, tab2, tab3, tab4 = st.tabs(["🗄️ Rak", "🔍 Cari", "📝 Input", "❌ Hapus"])
+        
+        with tab1:
+            ui_manajemen_rak()
+        with tab2:
+            ui_pencarian_visual()
+        with tab3:
+            ui_input_barang()
+        with tab4:
+            ui_hapus_barang()
 
-# ==================== GLOBAL NOTIFICATION HANDLER ====================
+
+# ==================== GLOBAL NOTIFICATION HANDLER (INSTAN) ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
