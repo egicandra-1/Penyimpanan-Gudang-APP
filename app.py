@@ -125,13 +125,15 @@ if "mode_aplikasi" not in st.session_state:
 
 if "input_version" not in st.session_state:
     st.session_state.input_version = 0
+    
+if "last_search_query" not in st.session_state:
+    st.session_state.last_search_query = ""
 
 # ==================== CALLBACK TAMBAH RAK ====================
 def on_enter_tambah_rak():
     v = st.session_state.input_version
     raw_val = st.session_state.get(f"input_rak_baru_scan_{v}", "").strip()
     
-    # TAMENG: Jika kosong (akibat double enter dari scanner), abaikan!
     if not raw_val: return
     
     now = time.time()
@@ -141,7 +143,7 @@ def on_enter_tambah_rak():
         prev_raw = st.session_state.last_raw_tambah_rak
         prev_time = st.session_state.last_raw_tambah_rak_time
         
-        if now - prev_time < 3.0:
+        if now - prev_time < 4.0:
             if prev_raw and raw_val.startswith(prev_raw):
                 potential_clean = raw_val[len(prev_raw):].strip()
                 if len(potential_clean) >= 2:
@@ -209,9 +211,19 @@ def on_enter_search():
     v = st.session_state.input_version
     query = st.session_state.get(f"main_search_input_{v}", "").strip()
     
-    # TAMENG: Jika scanner pantulan kosong, abaikan
     if not query:
         return
+        
+    # --- TAMENG ANTI PANTULAN SCANNER ---
+    now = time.time()
+    if "last_search_time" in st.session_state:
+        if now - st.session_state.last_search_time < 4.0:
+            if st.session_state.get("last_search_val") == query:
+                return
+                
+    st.session_state.last_search_time = now
+    st.session_state.last_search_val = query
+    # ------------------------------------
         
     st.session_state.last_search_query = query
     st.session_state.input_version += 1
@@ -223,9 +235,20 @@ def on_enter_input_barang():
     stok_raw = st.session_state.get(f"input_stok_field_{v}", "").strip()
     rak = st.session_state.get(f"input_rak_field_{v}", "").strip()
     
-    # TAMENG DOUBLE ENTER: Jika semua kotak kosong, diam diam abaikan
     if not sku and not stok_raw and not rak:
         return
+        
+    # --- TAMENG ANTI PANTULAN SCANNER ---
+    now = time.time()
+    if "last_input_time" in st.session_state:
+        if now - st.session_state.last_input_time < 4.0:
+            if st.session_state.get("last_input_sku") == sku and st.session_state.get("last_input_rak") == rak:
+                return
+                
+    st.session_state.last_input_time = now
+    st.session_state.last_input_sku = sku
+    st.session_state.last_input_rak = rak
+    # ------------------------------------
         
     if not sku or not stok_raw or not rak:
         st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!"}
@@ -256,9 +279,21 @@ def on_enter_hapus_barang():
     sku_clean = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
     rak_clean = st.session_state.get(f"hapus_rak_field_{v}", "").strip()
     
-    # TAMENG DOUBLE ENTER: Jika kedua kotak kosong akibat pantulan scanner cepat, abaikan secara diam-diam!
     if not sku_clean and not rak_clean:
         return
+        
+    # --- TAMENG ANTI PANTULAN SCANNER (MEMBLOKIR ERROR PALSU) ---
+    now = time.time()
+    if "last_hapus_time" in st.session_state:
+        # Jika ada enter ganda dengan data yang sama persis saat jeda time.sleep (di bawah 4 detik), ABAIKAN!
+        if now - st.session_state.last_hapus_time < 4.0:
+            if st.session_state.get("last_hapus_sku") == sku_clean and st.session_state.get("last_hapus_rak") == rak_clean:
+                return
+                
+    st.session_state.last_hapus_time = now
+    st.session_state.last_hapus_sku = sku_clean
+    st.session_state.last_hapus_rak = rak_clean
+    # -------------------------------------------------------------
         
     if not sku_clean or not rak_clean:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!"}
@@ -533,7 +568,6 @@ if st.session_state.mode_aplikasi is None:
             st.rerun()
 
 else:
-    # --- SUNTIKAN JAVASCRIPT: PINDAH KURSOR OTOMATIS SAAT ENTER DIETIK DI SEMUA INPUT ---
     components.html("""
         <script>
         const doc = window.parent.document;
@@ -569,7 +603,6 @@ else:
                     }
                 }, true);
 
-                // --- LOMPAT KURSOR OTOMATIS SAAT PINDAH TAB ---
                 document.addEventListener('click', function(e) {
                     const tabNode = e.target.closest('button[data-baseweb="tab"]') || e.target.closest('[role="tab"]');
                     if (tabNode) {
@@ -588,7 +621,6 @@ else:
         </script>
     """, height=0, width=0)
 
-    # --- STRUKTUR UTAMA TETAP 100% PERSIS SEPERTI SEMULA ---
     col_judul, col_tombol = st.columns([4, 1])
     
     with col_judul:
@@ -602,7 +634,6 @@ else:
             
     st.divider()
 
-    # --- TOMBOL SINKRONISASI DI SIDEBAR ---
     with st.sidebar:
         st.markdown("### ⚙️ Kontrol Sistem")
         if st.button("🔁 Sinkronisasi Data", use_container_width=True, type="primary"):
@@ -636,11 +667,8 @@ else:
 
 
 # ==================== GLOBAL NOTIFICATION & TIME SLEEP HANDLER ====================
-# Sistem ini memastikan notifikasi muncul selama 2 detik lalu layar di-restart paksa 
-# agar kursor otomatis langsung melompat tanpa hambatan.
 need_sleep = False
 
-# 1. Menampung Render Notifikasi Global (Berhasil/Gagal)
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
@@ -655,7 +683,6 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
                 st.warning(notif["text"])
         need_sleep = True
 
-# 2. Menampung Render Hasil Pencarian (Tab Cari)
 if "last_search_query" in st.session_state and st.session_state.last_search_query:
     query = st.session_state.last_search_query
     
@@ -677,12 +704,9 @@ if "last_search_query" in st.session_state and st.session_state.last_search_quer
                 st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
         need_sleep = True
 
-# 3. Eksekusi Jeda 2 Detik & Pembersihan Layar (Restart Kursor)
 if need_sleep:
-    # Aplikasi akan membeku 2 detik agar Anda/karyawan bisa membaca notifikasi
     time.sleep(2.0) 
     
-    # Menyiapkan pemicu kursor setelah layar di-refresh
     if "global_notif" in st.session_state and st.session_state.global_notif:
         tab = st.session_state.global_notif["tab"]
         if tab == "input":
@@ -692,13 +716,10 @@ if need_sleep:
         elif tab == "rak":
             st.session_state.focus_rak_after_save = True
             
-        # Bersihkan notifikasi
         st.session_state.global_notif = None
 
     if "last_search_query" in st.session_state and st.session_state.last_search_query:
         st.session_state.focus_search_after_save = True
-        # Bersihkan antrean memori kata yang dicari
         st.session_state.last_search_query = ""
 
-    # RESTART PAKSA HALAMAN INI AGAR LAYAR BERSIH & KURSOR MELOMPAT SEPERTI BARU!
     st.rerun()
