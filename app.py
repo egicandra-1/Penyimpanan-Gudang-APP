@@ -125,14 +125,13 @@ if "mode_aplikasi" not in st.session_state:
 
 if "input_version" not in st.session_state:
     st.session_state.input_version = 0
-    
-if "last_search_query" not in st.session_state:
-    st.session_state.last_search_query = ""
 
-# ==================== CALLBACK TAMBAH RAK (ANTI TUMPANG TINDIH) ====================
+# ==================== CALLBACK TAMBAH RAK ====================
 def on_enter_tambah_rak():
     v = st.session_state.input_version
     raw_val = st.session_state.get(f"input_rak_baru_scan_{v}", "").strip()
+    
+    # TAMENG: Jika kosong (akibat double enter dari scanner), abaikan!
     if not raw_val: return
     
     now = time.time()
@@ -209,10 +208,13 @@ def proses_perubahan_tabel_rak():
 def on_enter_search():
     v = st.session_state.input_version
     query = st.session_state.get(f"main_search_input_{v}", "").strip()
-    if query:
-        st.session_state.last_search_query = query
+    
+    # TAMENG: Jika scanner pantulan kosong, abaikan
+    if not query:
+        return
+        
+    st.session_state.last_search_query = query
     st.session_state.input_version += 1
-    st.session_state.focus_search_after_save = True
 
 # ==================== CALLBACK TAB INPUT ====================
 def on_enter_input_barang():
@@ -221,6 +223,10 @@ def on_enter_input_barang():
     stok_raw = st.session_state.get(f"input_stok_field_{v}", "").strip()
     rak = st.session_state.get(f"input_rak_field_{v}", "").strip()
     
+    # TAMENG DOUBLE ENTER: Jika semua kotak kosong, diam diam abaikan
+    if not sku and not stok_raw and not rak:
+        return
+        
     if not sku or not stok_raw or not rak:
         st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!"}
         st.session_state.input_version += 1
@@ -242,9 +248,7 @@ def on_enter_input_barang():
     save_data_to_sheets()
     
     st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
-    
     st.session_state.input_version += 1
-    st.session_state.focus_sku_after_save = True
 
 # ==================== CALLBACK TAB HAPUS (TUMPUKAN GRAVITASI) ====================
 def on_enter_hapus_barang():
@@ -252,6 +256,10 @@ def on_enter_hapus_barang():
     sku_clean = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
     rak_clean = st.session_state.get(f"hapus_rak_field_{v}", "").strip()
     
+    # TAMENG DOUBLE ENTER: Jika kedua kotak kosong akibat pantulan scanner cepat, abaikan secara diam-diam!
+    if not sku_clean and not rak_clean:
+        return
+        
     if not sku_clean or not rak_clean:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!"}
         st.session_state.input_version += 1
@@ -262,11 +270,9 @@ def on_enter_hapus_barang():
         filtered_rak = [item for item in rak_lama if item["sku"].lower() != sku_clean.lower()]
         
         if len(filtered_rak) < len(rak_lama):
-            # LOGIKA TUMPUKAN GRAVITASI (TURUN OTOMATIS)
             parts = rak_clean.rsplit("-", 1)
             pesan_tambahan = ""
             
-            # Cek apakah format namanya adalah Grup-Lantai (contoh: A-1 atau B-SB-6)
             if len(parts) == 2 and parts[1].isdigit():
                 group = parts[0]
                 deleted_floor = int(parts[1])
@@ -277,26 +283,21 @@ def on_enter_hapus_barang():
                     curr_rak = f"{group}-{current_floor - 1}"
                     
                     if next_rak in st.session_state.rak_gudang_tanpa_posisi:
-                        # Pindahkan isi tumpukan atas ke tumpukan bawahnya
                         st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
                         current_floor += 1
                     else:
-                        # Hapus tumpukan paling atas yang fisiknya sudah turun/hilang
                         top_rak = f"{group}-{current_floor - 1}"
                         if top_rak in st.session_state.rak_gudang_tanpa_posisi:
                             del st.session_state.rak_gudang_tanpa_posisi[top_rak]
                         break
                 pesan_tambahan = " Rak di atasnya otomatis turun."
             else:
-                # Jika format bukan grup-lantai, kembalikan seperti biasa (hanya hapus isi SKU-nya)
                 st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
                 pesan_tambahan = ""
 
             save_data_to_sheets()
             st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!{pesan_tambahan}"}
-            
             st.session_state.input_version += 1
-            st.session_state.focus_hapus_sku_after_save = True
         else:
             st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'."}
             st.session_state.input_version += 1
@@ -311,6 +312,11 @@ def ui_manajemen_rak():
     placeholders["rak"] = st.empty() 
 
     v = st.session_state.input_version
+    
+    target_focus = None
+    if st.session_state.get("focus_rak_after_save", False):
+        target_focus = "Nama Rak Baru:"
+        st.session_state.focus_rak_after_save = False
 
     st.markdown("#### ➕ Tambah Rak Baru")
     st.text_input(
@@ -332,13 +338,10 @@ def ui_manajemen_rak():
         df_rak = []
         for r in rak_sorted:
             items = st.session_state.rak_gudang_tanpa_posisi[r]
-            
-            # --- PEMBARUAN KOLOM TABEL: Menyusun daftar SKU di dalam rak ---
             sku_list = ", ".join([str(item["sku"]) for item in items]) if items else "-"
             sku_count = len(items)
             total_stok = sum(item["stok"] for item in items)
             
-            # Memasukkan ke dalam array df_rak sesuai urutan yang Anda minta
             df_rak.append({
                 "Nama Rak": r, 
                 "KODE SKU": sku_list, 
@@ -359,6 +362,24 @@ def ui_manajemen_rak():
             key="editor_tabel_rak",
             on_change=proses_perubahan_tabel_rak
         )
+        
+    if target_focus:
+        components.html(f"""
+            <script id="focus-rak-{time.time()}">
+            const doc = window.parent.document;
+            function tryFocus(label, attempts) {{
+                if (attempts <= 0) return;
+                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
+                if (inputToFocus) {{
+                    setTimeout(() => inputToFocus.focus(), 50);
+                }} else {{
+                    setTimeout(() => tryFocus(label, attempts - 1), 100);
+                }}
+            }}
+            tryFocus('{target_focus}', 15);
+            </script>
+        """, height=0, width=0)
 
 def ui_pencarian_visual():
     st.markdown("### 🔍 Pencarian Barang / Rak")
@@ -375,30 +396,29 @@ def ui_pencarian_visual():
         key=f"main_search_input_{v}",
         on_change=on_enter_search
     )
-
-    query = st.session_state.get("last_search_query", "")
     
-    if query:
-        hasil_cari = []
-        for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
-            rak_cocok = query.lower() in nama_rak.lower()
-            for item in daftar_item:
-                sku_cocok = query.lower() in item["sku"].lower()
-                if rak_cocok or sku_cocok:
-                    hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
+    placeholders["cari"] = st.empty()
 
-        if hasil_cari:
-            st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan untuk pencarian '{query}':")
-            # --- RENDER KILAT: Menggunakan teks Markdown instan daripada st.info ---
-            for hasil in hasil_cari:
-                st.markdown(f"📦 SKU: **`{hasil['sku_penuh']}`** &nbsp;&nbsp;|&nbsp;&nbsp; 📍 Rak: **{hasil['rak']}** &nbsp;&nbsp;|&nbsp;&nbsp; 🔢 Stok: **{hasil['stok']}**")
-        else:
-            st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
+    st.markdown("---")
+    st.markdown("### 📊 Visualisasi Isi Rak")
+    if not st.session_state.rak_gudang_tanpa_posisi:
+        st.info("Belum ada rak yang terdaftar.")
+    else:
+        rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+        for r_nama in rak_sorted_visual:
+            daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
+            st.markdown(f"#### 📁 {r_nama}")
+            if not daftar_item:
+                st.error("⬜ *RAK KOSONG*")
+            else:
+                cols = st.columns(min(len(daftar_item), 4) if len(daftar_item) > 0 else 1)
+                for idx, item in enumerate(daftar_item):
+                    with cols[idx % 4]:
+                        st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
                         
     if target_focus:
-        # --- ID WAKTU DINAMIS: Memaksa Streamlit mereset kursor pada Tab Cari ---
         components.html(f"""
-            <script id="focus-search-{time.time()}">
+            <script id="focus-cari-{time.time()}">
             const doc = window.parent.document;
             function tryFocus(label, attempts) {{
                 if (attempts <= 0) return;
@@ -436,7 +456,6 @@ def ui_input_barang():
     st.button("Simpan ke Rak", use_container_width=True, on_click=on_enter_input_barang)
 
     if target_focus:
-        # --- ID WAKTU DINAMIS ---
         components.html(f"""
             <script id="focus-input-{time.time()}">
             const doc = window.parent.document;
@@ -475,7 +494,6 @@ def ui_hapus_barang():
     st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
 
     if target_focus:
-        # --- ID WAKTU DINAMIS ---
         components.html(f"""
             <script id="focus-hapus-{time.time()}">
             const doc = window.parent.document;
@@ -617,17 +635,70 @@ else:
             ui_hapus_barang()
 
 
-# ==================== GLOBAL NOTIFICATION HANDLER (INSTAN) ====================
+# ==================== GLOBAL NOTIFICATION & TIME SLEEP HANDLER ====================
+# Sistem ini memastikan notifikasi muncul selama 2 detik lalu layar di-restart paksa 
+# agar kursor otomatis langsung melompat tanpa hambatan.
+need_sleep = False
+
+# 1. Menampung Render Notifikasi Global (Berhasil/Gagal)
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     tab_aktif = notif["tab"]
     
     if tab_aktif in placeholders:
-        if notif["type"] == "success":
-            placeholders[tab_aktif].success(notif["text"])
-        elif notif["type"] == "error":
-            placeholders[tab_aktif].error(notif["text"])
-        elif notif["type"] == "warning":
-            placeholders[tab_aktif].warning(notif["text"])
+        with placeholders[tab_aktif]:
+            if notif["type"] == "success":
+                st.success(notif["text"])
+            elif notif["type"] == "error":
+                st.error(notif["text"])
+            elif notif["type"] == "warning":
+                st.warning(notif["text"])
+        need_sleep = True
+
+# 2. Menampung Render Hasil Pencarian (Tab Cari)
+if "last_search_query" in st.session_state and st.session_state.last_search_query:
+    query = st.session_state.last_search_query
     
-    st.session_state.global_notif = None
+    if "cari" in placeholders:
+        with placeholders["cari"]:
+            hasil_cari = []
+            for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
+                rak_cocok = query.lower() in nama_rak.lower()
+                for item in daftar_item:
+                    sku_cocok = query.lower() in item["sku"].lower()
+                    if rak_cocok or sku_cocok:
+                        hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
+
+            if hasil_cari:
+                st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan untuk pencarian '{query}':")
+                for hasil in hasil_cari:
+                    st.markdown(f"📦 SKU: **`{hasil['sku_penuh']}`** &nbsp;&nbsp;|&nbsp;&nbsp; 📍 Rak: **{hasil['rak']}** &nbsp;&nbsp;|&nbsp;&nbsp; 🔢 Stok: **{hasil['stok']}**")
+            else:
+                st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
+        need_sleep = True
+
+# 3. Eksekusi Jeda 2 Detik & Pembersihan Layar (Restart Kursor)
+if need_sleep:
+    # Aplikasi akan membeku 2 detik agar Anda/karyawan bisa membaca notifikasi
+    time.sleep(2.0) 
+    
+    # Menyiapkan pemicu kursor setelah layar di-refresh
+    if "global_notif" in st.session_state and st.session_state.global_notif:
+        tab = st.session_state.global_notif["tab"]
+        if tab == "input":
+            st.session_state.focus_sku_after_save = True
+        elif tab == "hapus":
+            st.session_state.focus_hapus_sku_after_save = True
+        elif tab == "rak":
+            st.session_state.focus_rak_after_save = True
+            
+        # Bersihkan notifikasi
+        st.session_state.global_notif = None
+
+    if "last_search_query" in st.session_state and st.session_state.last_search_query:
+        st.session_state.focus_search_after_save = True
+        # Bersihkan antrean memori kata yang dicari
+        st.session_state.last_search_query = ""
+
+    # RESTART PAKSA HALAMAN INI AGAR LAYAR BERSIH & KURSOR MELOMPAT SEPERTI BARU!
+    st.rerun()
