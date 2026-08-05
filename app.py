@@ -125,9 +125,9 @@ if "mode_aplikasi" not in st.session_state:
 
 if "input_version" not in st.session_state:
     st.session_state.input_version = 0
-    
-if "last_search_query" not in st.session_state:
-    st.session_state.last_search_query = ""
+
+if "displayed_search_query" not in st.session_state:
+    st.session_state.displayed_search_query = ""
 
 # ==================== CALLBACK TAMBAH RAK ====================
 def on_enter_tambah_rak():
@@ -214,7 +214,6 @@ def on_enter_search():
     if not query:
         return
         
-    # --- TAMENG ANTI PANTULAN SCANNER ---
     now = time.time()
     if "last_search_time" in st.session_state:
         if now - st.session_state.last_search_time < 4.0:
@@ -223,10 +222,11 @@ def on_enter_search():
                 
     st.session_state.last_search_time = now
     st.session_state.last_search_val = query
-    # ------------------------------------
         
-    st.session_state.last_search_query = query
+    # Selesai mencari, simpan hasilnya ke memori layar, lalu kosongkan kolom input!
+    st.session_state.displayed_search_query = query
     st.session_state.input_version += 1
+    st.session_state.focus_search_after_save = True
 
 # ==================== CALLBACK TAB INPUT ====================
 def on_enter_input_barang():
@@ -238,7 +238,6 @@ def on_enter_input_barang():
     if not sku and not stok_raw and not rak:
         return
         
-    # --- TAMENG ANTI PANTULAN SCANNER ---
     now = time.time()
     if "last_input_time" in st.session_state:
         if now - st.session_state.last_input_time < 4.0:
@@ -248,7 +247,6 @@ def on_enter_input_barang():
     st.session_state.last_input_time = now
     st.session_state.last_input_sku = sku
     st.session_state.last_input_rak = rak
-    # ------------------------------------
         
     if not sku or not stok_raw or not rak:
         st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!"}
@@ -282,10 +280,8 @@ def on_enter_hapus_barang():
     if not sku_clean and not rak_clean:
         return
         
-    # --- TAMENG ANTI PANTULAN SCANNER (MEMBLOKIR ERROR PALSU) ---
     now = time.time()
     if "last_hapus_time" in st.session_state:
-        # Jika ada enter ganda dengan data yang sama persis saat jeda time.sleep (di bawah 4 detik), ABAIKAN!
         if now - st.session_state.last_hapus_time < 4.0:
             if st.session_state.get("last_hapus_sku") == sku_clean and st.session_state.get("last_hapus_rak") == rak_clean:
                 return
@@ -293,7 +289,6 @@ def on_enter_hapus_barang():
     st.session_state.last_hapus_time = now
     st.session_state.last_hapus_sku = sku_clean
     st.session_state.last_hapus_rak = rak_clean
-    # -------------------------------------------------------------
         
     if not sku_clean or not rak_clean:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!"}
@@ -431,8 +426,24 @@ def ui_pencarian_visual():
         key=f"main_search_input_{v}",
         on_change=on_enter_search
     )
+
+    query = st.session_state.get("displayed_search_query", "")
     
-    placeholders["cari"] = st.empty()
+    if query:
+        hasil_cari = []
+        for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
+            rak_cocok = query.lower() in nama_rak.lower()
+            for item in daftar_item:
+                sku_cocok = query.lower() in item["sku"].lower()
+                if rak_cocok or sku_cocok:
+                    hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
+
+        if hasil_cari:
+            st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan untuk pencarian '{query}':")
+            for hasil in hasil_cari:
+                st.markdown(f"📦 SKU: **`{hasil['sku_penuh']}`** &nbsp;&nbsp;|&nbsp;&nbsp; 📍 Rak: **{hasil['rak']}** &nbsp;&nbsp;|&nbsp;&nbsp; 🔢 Stok: **{hasil['stok']}**")
+        else:
+            st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
 
     st.markdown("---")
     st.markdown("### 📊 Visualisasi Isi Rak")
@@ -667,6 +678,8 @@ else:
 
 
 # ==================== GLOBAL NOTIFICATION & TIME SLEEP HANDLER ====================
+# Hanya Notifikasi Input/Hapus/Rak yang menggunakan Time Sleep 2 Detik.
+# Tab Cari 100% instan dan tidak akan pernah dibekukan!
 need_sleep = False
 
 if "global_notif" in st.session_state and st.session_state.global_notif:
@@ -683,27 +696,6 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
                 st.warning(notif["text"])
         need_sleep = True
 
-if "last_search_query" in st.session_state and st.session_state.last_search_query:
-    query = st.session_state.last_search_query
-    
-    if "cari" in placeholders:
-        with placeholders["cari"]:
-            hasil_cari = []
-            for nama_rak, daftar_item in st.session_state.rak_gudang_tanpa_posisi.items():
-                rak_cocok = query.lower() in nama_rak.lower()
-                for item in daftar_item:
-                    sku_cocok = query.lower() in item["sku"].lower()
-                    if rak_cocok or sku_cocok:
-                        hasil_cari.append({"rak": nama_rak, "sku_penuh": item["sku"], "stok": item["stok"]})
-
-            if hasil_cari:
-                st.success(f"📌 Ditemukan {len(hasil_cari)} kecocokan untuk pencarian '{query}':")
-                for hasil in hasil_cari:
-                    st.markdown(f"📦 SKU: **`{hasil['sku_penuh']}`** &nbsp;&nbsp;|&nbsp;&nbsp; 📍 Rak: **{hasil['rak']}** &nbsp;&nbsp;|&nbsp;&nbsp; 🔢 Stok: **{hasil['stok']}**")
-            else:
-                st.error(f"❌ Tidak ada hasil untuk '{query}' pada SKU maupun Nama Rak manapun.")
-        need_sleep = True
-
 if need_sleep:
     time.sleep(2.0) 
     
@@ -718,8 +710,5 @@ if need_sleep:
             
         st.session_state.global_notif = None
 
-    if "last_search_query" in st.session_state and st.session_state.last_search_query:
-        st.session_state.focus_search_after_save = True
-        st.session_state.last_search_query = ""
-
+    # Restart Halaman Paksa Khusus untuk Notifikasi Input/Hapus
     st.rerun()
