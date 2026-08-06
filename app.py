@@ -282,7 +282,6 @@ def on_enter_input_barang():
 
 # ==================== CALLBACK TAB HAPUS (TUMPUKAN GRAVITASI) ====================
 def on_enter_hapus_barang():
-    # Cegah input baru jika pop up konfirmasi sedang menyala
     if st.session_state.pending_hapus is not None:
         return
 
@@ -315,9 +314,7 @@ def on_enter_hapus_barang():
         if len(filtered_rak) < len(rak_lama):
             parts = rak_clean.rsplit("-", 1)
             
-            # --- CEK APAKAH INI AKAN MEMICU GRAVITASI? ---
             if len(filtered_rak) == 0 and len(parts) == 2 and parts[1].isdigit():
-                # MENYALAKAN POP-UP KONFIRMASI! Hapus ditunda.
                 st.session_state.pending_hapus = {
                     "sku": sku_clean,
                     "rak": rak_clean
@@ -325,7 +322,6 @@ def on_enter_hapus_barang():
                 st.session_state.input_version += 1
                 return 
             else:
-                # NORMAL HAPUS (Tidak memicu gravitasi)
                 st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
                 save_data_to_sheets()
                 st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!", "timestamp": time.time()}
@@ -493,17 +489,31 @@ def ui_pencarian_visual():
     else:
         rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         
-        html_vis = ""
+        # =========================================================================
+        # PEROMBAKAN MESIN RENDER VISUAL: TAMPILAN GRID KARTU (MENYAMPING)
+        # =========================================================================
+        # 'grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))' 
+        # artinya mesin akan menyusun kotak ke samping secara otomatis menyesuaikan lebar layar.
+        html_vis = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; padding-bottom: 20px;'>"
+        
         for r_nama in rak_sorted_visual:
             daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
-            html_vis += f"<div style='margin-top: 15px; font-size: 18px; font-weight: bold;'>📁 {r_nama}</div>"
+            
+            # Membungkus setiap Rak dalam sebuah "Kartu" putih
+            html_vis += "<div style='background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.05);'>"
+            html_vis += f"<div style='font-size: 16px; font-weight: bold; border-bottom: 2px solid #f0f2f6; padding-bottom: 8px; margin-bottom: 12px; color: #31333F;'>📁 {r_nama}</div>"
+            
             if not daftar_item:
-                html_vis += "<div style='margin-top: 5px; padding: 10px; background-color: #ffeeba; color: #856404; border-radius: 8px;'>⬜ <i>RAK KOSONG</i></div>"
+                html_vis += "<div style='padding: 10px; background-color: #fff3cd; color: #856404; border-radius: 6px; text-align: center; font-size: 14px;'>⬜ <i>RAK KOSONG</i></div>"
             else:
-                html_vis += "<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;'>"
+                html_vis += "<div style='display: flex; flex-direction: column; gap: 8px;'>"
                 for item in daftar_item:
-                    html_vis += f"<div style='background-color: #f8f9fa; padding: 10px 15px; border-radius: 8px; border: 1px solid #dee2e6; font-size: 14px; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);'>📦 <b>{item['sku']}</b><br><span style='font-size: 12px; color: #555;'>🔢 Stok: {item['stok']}</span></div>"
+                    # Setiap barang di dalam rak akan tersusun rapi dengan label stok di kanannya
+                    html_vis += f"<div style='background-color: #f8f9fa; padding: 8px 12px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px; display: flex; justify-content: space-between; align-items: center;'><span>📦 <b>{item['sku']}</b></span> <span style='font-size: 11px; font-weight: bold; color: #555; background: #e2e3e5; padding: 2px 6px; border-radius: 10px;'>Stok: {item['stok']}</span></div>"
                 html_vis += "</div>"
+            html_vis += "</div>" # Penutup Kartu Rak
+            
+        html_vis += "</div>" # Penutup Grid Utama
         
         st.markdown(html_vis, unsafe_allow_html=True)
                         
@@ -568,7 +578,6 @@ def ui_hapus_barang():
     st.markdown("### ❌ Hapus Barang dari Rak")
     placeholders["hapus"] = st.empty() 
     
-    # === POP UP KONFIRMASI GRAVITASI ===
     if st.session_state.pending_hapus is not None:
         pending = st.session_state.pending_hapus
         st.error(f"⚠️ **PERINGATAN SISTEM GRAVITASI!**\n\nMenghapus SKU **{pending['sku']}** akan membuat **Rak {pending['rak']}** menjadi KOSONG TOTAL.\n\nApakah Anda yakin ingin menghapus barang ini dan **menurunkan rak di atasnya**?")
@@ -579,7 +588,6 @@ def ui_hapus_barang():
         with col2:
             st.button("❌ TIDAK, BATAL", use_container_width=True, on_click=konfirmasi_tidak)
     else:
-        # === INPUT NORMAL JIKA TIDAK ADA POP UP ===
         v = st.session_state.input_version
         target_focus = None
         if st.session_state.get("focus_hapus_sku_after_save", False):
@@ -733,7 +741,7 @@ else:
             ui_hapus_barang()
 
 
-# ==================== GLOBAL NOTIFICATION HANDLER (TANPA SLEEP BEKU) ====================
+# ==================== GLOBAL NOTIFICATION HANDLER ====================
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     
