@@ -490,30 +490,28 @@ def ui_pencarian_visual():
         rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         
         # =========================================================================
-        # PEROMBAKAN MESIN RENDER VISUAL: TAMPILAN GRID KARTU (MENYAMPING)
+        # PEROMBAKAN MESIN RENDER VISUAL KHUSUS PDA (LAYAR SEMPIT)
+        # minmax diubah menjadi 130px agar muat 2 baris di layar scanner Anda!
+        # Padding dan font diperkecil agar terlihat rapi dan tidak tumpang tindih.
         # =========================================================================
-        # 'grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))' 
-        # artinya mesin akan menyusun kotak ke samping secara otomatis menyesuaikan lebar layar.
-        html_vis = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; padding-bottom: 20px;'>"
+        html_vis = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; padding-bottom: 20px;'>"
         
         for r_nama in rak_sorted_visual:
             daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
             
-            # Membungkus setiap Rak dalam sebuah "Kartu" putih
-            html_vis += "<div style='background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.05);'>"
-            html_vis += f"<div style='font-size: 16px; font-weight: bold; border-bottom: 2px solid #f0f2f6; padding-bottom: 8px; margin-bottom: 12px; color: #31333F;'>📁 {r_nama}</div>"
+            html_vis += "<div style='background-color: #ffffff; border: 1px solid #e0e0e0; padding: 10px; border-radius: 8px; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);'>"
+            html_vis += f"<div style='font-size: 14px; font-weight: bold; border-bottom: 2px solid #f0f2f6; padding-bottom: 6px; margin-bottom: 8px; color: #31333F;'>📁 {r_nama}</div>"
             
             if not daftar_item:
-                html_vis += "<div style='padding: 10px; background-color: #fff3cd; color: #856404; border-radius: 6px; text-align: center; font-size: 14px;'>⬜ <i>RAK KOSONG</i></div>"
+                html_vis += "<div style='padding: 6px; background-color: #fff3cd; color: #856404; border-radius: 4px; text-align: center; font-size: 11px;'>⬜ <i>KOSONG</i></div>"
             else:
-                html_vis += "<div style='display: flex; flex-direction: column; gap: 8px;'>"
+                html_vis += "<div style='display: flex; flex-direction: column; gap: 6px;'>"
                 for item in daftar_item:
-                    # Setiap barang di dalam rak akan tersusun rapi dengan label stok di kanannya
-                    html_vis += f"<div style='background-color: #f8f9fa; padding: 8px 12px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 13px; display: flex; justify-content: space-between; align-items: center;'><span>📦 <b>{item['sku']}</b></span> <span style='font-size: 11px; font-weight: bold; color: #555; background: #e2e3e5; padding: 2px 6px; border-radius: 10px;'>Stok: {item['stok']}</span></div>"
+                    html_vis += f"<div style='background-color: #f8f9fa; padding: 6px 8px; border-radius: 4px; border: 1px solid #dee2e6; font-size: 11px; display: flex; justify-content: space-between; align-items: center;'><span>📦 <b>{item['sku']}</b></span> <span style='font-size: 10px; font-weight: bold; color: #555; background: #e2e3e5; padding: 2px 5px; border-radius: 8px;'>{item['stok']}</span></div>"
                 html_vis += "</div>"
-            html_vis += "</div>" # Penutup Kartu Rak
+            html_vis += "</div>"
             
-        html_vis += "</div>" # Penutup Grid Utama
+        html_vis += "</div>"
         
         st.markdown(html_vis, unsafe_allow_html=True)
                         
