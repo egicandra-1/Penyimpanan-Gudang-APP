@@ -1,6 +1,7 @@
 import time
 import threading
 import copy
+import re
 from google.oauth2.service_account import Credentials
 import gspread
 import streamlit as st
@@ -15,6 +16,11 @@ SCOPE = [
 ]
 
 placeholders = {}
+
+# ==================== FUNGSI PENGURUTAN NATURAL ====================
+# Fungsi ini membuat komputer membaca angka seperti manusia membaca angka (A-2 sebelum A-10)
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
 
 @st.cache_resource
 def init_connection_v3():
@@ -159,16 +165,18 @@ def on_enter_tambah_rak():
     if clean_val not in st.session_state.rak_gudang_tanpa_posisi:
         st.session_state.rak_gudang_tanpa_posisi[clean_val] = []
         save_data_to_sheets()
-        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"✅ Rak '{clean_val}' berhasil ditambahkan!"}
+        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": f"✅ Rak '{clean_val}' berhasil ditambahkan!", "timestamp": time.time()}
     else:
-        st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada."}
+        st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada.", "timestamp": time.time()}
         
     st.session_state.input_version += 1
+    # Memaksa kursor menyala kembali setelah scan berhasil secara instan
+    st.session_state.focus_rak_after_save = True 
 
 # ==================== CALLBACK DATABASE RAK ====================
 def proses_perubahan_tabel_rak():
     changes = st.session_state.editor_tabel_rak
-    rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+    rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
     needs_save = False
     ada_error = False
     
@@ -191,7 +199,7 @@ def proses_perubahan_tabel_rak():
                             st.session_state.rak_gudang_tanpa_posisi[new_name] = st.session_state.rak_gudang_tanpa_posisi.pop(old_name)
                             needs_save = True
                         else:
-                            st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Gagal! Nama rak '{new_name}' sudah ada."}
+                            st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Gagal! Nama rak '{new_name}' sudah ada.", "timestamp": time.time()}
                             ada_error = True
 
     if changes.get("added_rows"):
@@ -204,7 +212,7 @@ def proses_perubahan_tabel_rak():
 
     if needs_save and not ada_error:
         save_data_to_sheets()
-        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!"}
+        st.session_state.global_notif = {"tab": "rak", "type": "success", "text": "✅ Perubahan pada database rak berhasil disimpan!", "timestamp": time.time()}
         
 # ==================== CALLBACK TAB CARI ====================
 def on_enter_search():
@@ -248,17 +256,17 @@ def on_enter_input_barang():
     st.session_state.last_input_rak = rak
         
     if not sku or not stok_raw or not rak:
-        st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!"}
+        st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Semua kolom harus diisi!", "timestamp": time.time()}
         st.session_state.input_version += 1
         return
         
     if not stok_raw.isdigit():
-        st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Stok harus angka!"}
+        st.session_state.global_notif = {"tab": "input", "type": "error", "text": "❌ Stok harus angka!", "timestamp": time.time()}
         st.session_state.input_version += 1
         return
         
     if rak not in st.session_state.rak_gudang_tanpa_posisi:
-        st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{rak}' tidak terdaftar."}
+        st.session_state.global_notif = {"tab": "input", "type": "error", "text": f"❌ Rak '{rak}' tidak terdaftar.", "timestamp": time.time()}
         st.session_state.input_version += 1
         return
         
@@ -267,8 +275,9 @@ def on_enter_input_barang():
     
     save_data_to_sheets()
     
-    st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'."}
+    st.session_state.global_notif = {"tab": "input", "type": "success", "text": f"✅ SKU '{sku}' (Stok: {stok}) berhasil ditambahkan ke '{rak}'.", "timestamp": time.time()}
     st.session_state.input_version += 1
+    st.session_state.focus_sku_after_save = True
 
 # ==================== CALLBACK TAB HAPUS (TUMPUKAN GRAVITASI) ====================
 def on_enter_hapus_barang():
@@ -290,7 +299,7 @@ def on_enter_hapus_barang():
     st.session_state.last_hapus_rak = rak_clean
         
     if not sku_clean or not rak_clean:
-        st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!"}
+        st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": "❌ Kode SKU dan Nama Rak Asal harus diisi!", "timestamp": time.time()}
         st.session_state.input_version += 1
         return
         
@@ -325,14 +334,15 @@ def on_enter_hapus_barang():
                 pesan_tambahan = ""
 
             save_data_to_sheets()
-            st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!{pesan_tambahan}"}
+            st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!{pesan_tambahan}", "timestamp": time.time()}
             st.session_state.input_version += 1
         else:
-            st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'."}
+            st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'.", "timestamp": time.time()}
             st.session_state.input_version += 1
     else:
-        st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan."}
+        st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan.", "timestamp": time.time()}
         st.session_state.input_version += 1
+    st.session_state.focus_hapus_sku_after_save = True
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
 
@@ -363,7 +373,8 @@ def ui_manajemen_rak():
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
-        rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+        # PENGURUTAN NATURAL DITERAPKAN DI SINI
+        rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         df_rak = []
         for r in rak_sorted:
             items = st.session_state.rak_gudang_tanpa_posisi[r]
@@ -449,10 +460,9 @@ def ui_pencarian_visual():
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
-        rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+        # PENGURUTAN NATURAL DITERAPKAN DI SINI
+        rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         
-        # --- PEROMBAKAN MESIN RENDER VISUAL (SUPER KILAT) ---
-        # Ini akan menggambar ribuan kotak dalam waktu 0.01 detik tanpa membuat layar macet!
         html_vis = ""
         for r_nama in rak_sorted_visual:
             daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
@@ -682,35 +692,23 @@ else:
             ui_hapus_barang()
 
 
-# ==================== GLOBAL NOTIFICATION & TIME SLEEP HANDLER ====================
-need_sleep = False
-
+# ==================== GLOBAL NOTIFICATION HANDLER (TANPA SLEEP BEKU) ====================
+# Sistem ini membuat notifikasi bertahan selama 3.5 detik di layar,
+# TAPI Anda BISA TERUS MEN-SCAN barang baru TANPA HARUS MENUNGGU!
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
-    tab_aktif = notif["tab"]
     
-    if tab_aktif in placeholders:
-        with placeholders[tab_aktif]:
-            if notif["type"] == "success":
-                st.success(notif["text"])
-            elif notif["type"] == "error":
-                st.error(notif["text"])
-            elif notif["type"] == "warning":
-                st.warning(notif["text"])
-        need_sleep = True
-
-if need_sleep:
-    time.sleep(2.0) 
-    
-    if "global_notif" in st.session_state and st.session_state.global_notif:
-        tab = st.session_state.global_notif["tab"]
-        if tab == "input":
-            st.session_state.focus_sku_after_save = True
-        elif tab == "hapus":
-            st.session_state.focus_hapus_sku_after_save = True
-        elif tab == "rak":
-            st.session_state.focus_rak_after_save = True
-            
+    # Cek apakah notifikasi ini usianya masih di bawah 3.5 detik
+    if time.time() - notif.get("timestamp", time.time()) < 3.5:
+        tab_aktif = notif["tab"]
+        if tab_aktif in placeholders:
+            with placeholders[tab_aktif]:
+                if notif["type"] == "success":
+                    st.success(notif["text"])
+                elif notif["type"] == "error":
+                    st.error(notif["text"])
+                elif notif["type"] == "warning":
+                    st.warning(notif["text"])
+    else:
+        # Hapus notifikasi jika sudah kadaluarsa (lebih dari 3.5 detik)
         st.session_state.global_notif = None
-
-    st.rerun()
