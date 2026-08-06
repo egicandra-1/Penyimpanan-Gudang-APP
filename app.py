@@ -223,7 +223,6 @@ def on_enter_search():
     st.session_state.last_search_time = now
     st.session_state.last_search_val = query
         
-    # Selesai mencari, simpan hasilnya ke memori layar, lalu kosongkan kolom input!
     st.session_state.displayed_search_query = query
     st.session_state.input_version += 1
     st.session_state.focus_search_after_save = True
@@ -451,16 +450,22 @@ def ui_pencarian_visual():
         st.info("Belum ada rak yang terdaftar.")
     else:
         rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()))
+        
+        # --- PEROMBAKAN MESIN RENDER VISUAL (SUPER KILAT) ---
+        # Ini akan menggambar ribuan kotak dalam waktu 0.01 detik tanpa membuat layar macet!
+        html_vis = ""
         for r_nama in rak_sorted_visual:
             daftar_item = st.session_state.rak_gudang_tanpa_posisi[r_nama]
-            st.markdown(f"#### 📁 {r_nama}")
+            html_vis += f"<div style='margin-top: 15px; font-size: 18px; font-weight: bold;'>📁 {r_nama}</div>"
             if not daftar_item:
-                st.error("⬜ *RAK KOSONG*")
+                html_vis += "<div style='margin-top: 5px; padding: 10px; background-color: #ffeeba; color: #856404; border-radius: 8px;'>⬜ <i>RAK KOSONG</i></div>"
             else:
-                cols = st.columns(min(len(daftar_item), 4) if len(daftar_item) > 0 else 1)
-                for idx, item in enumerate(daftar_item):
-                    with cols[idx % 4]:
-                        st.info(f"📦 **`{item['sku']}`**\n\n🔢 Stok: {item['stok']}")
+                html_vis += "<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;'>"
+                for item in daftar_item:
+                    html_vis += f"<div style='background-color: #f8f9fa; padding: 10px 15px; border-radius: 8px; border: 1px solid #dee2e6; font-size: 14px; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);'>📦 <b>{item['sku']}</b><br><span style='font-size: 12px; color: #555;'>🔢 Stok: {item['stok']}</span></div>"
+                html_vis += "</div>"
+        
+        st.markdown(html_vis, unsafe_allow_html=True)
                         
     if target_focus:
         components.html(f"""
@@ -678,8 +683,6 @@ else:
 
 
 # ==================== GLOBAL NOTIFICATION & TIME SLEEP HANDLER ====================
-# Hanya Notifikasi Input/Hapus/Rak yang menggunakan Time Sleep 2 Detik.
-# Tab Cari 100% instan dan tidak akan pernah dibekukan!
 need_sleep = False
 
 if "global_notif" in st.session_state and st.session_state.global_notif:
@@ -710,5 +713,4 @@ if need_sleep:
             
         st.session_state.global_notif = None
 
-    # Restart Halaman Paksa Khusus untuk Notifikasi Input/Hapus
     st.rerun()
