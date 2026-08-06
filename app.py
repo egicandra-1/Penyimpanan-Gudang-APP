@@ -18,7 +18,6 @@ SCOPE = [
 placeholders = {}
 
 # ==================== FUNGSI PENGURUTAN NATURAL ====================
-# Fungsi ini membuat komputer membaca angka seperti manusia membaca angka (A-2 sebelum A-10)
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
 
@@ -170,7 +169,6 @@ def on_enter_tambah_rak():
         st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Rak '{clean_val}' sudah ada.", "timestamp": time.time()}
         
     st.session_state.input_version += 1
-    # Memaksa kursor menyala kembali setelah scan berhasil secara instan
     st.session_state.focus_rak_after_save = True 
 
 # ==================== CALLBACK DATABASE RAK ====================
@@ -305,13 +303,17 @@ def on_enter_hapus_barang():
         
     if rak_clean in st.session_state.rak_gudang_tanpa_posisi:
         rak_lama = st.session_state.rak_gudang_tanpa_posisi[rak_clean]
+        
+        # Mengecek apakah barang ada di rak ini
         filtered_rak = [item for item in rak_lama if item["sku"].lower() != sku_clean.lower()]
         
-        if len(filtered_rak) < len(rak_lama):
+        if len(filtered_rak) < len(rak_lama): # Barang ditemukan dan berhasil dihapus!
             parts = rak_clean.rsplit("-", 1)
             pesan_tambahan = ""
             
-            if len(parts) == 2 and parts[1].isdigit():
+            # --- LOGIKA GRAVITASI YANG SUDAH DIPERBAIKI ---
+            # Gravitasi HANYA aktif jika RAK MENJADI KOSONG TOTAL (len(filtered_rak) == 0)
+            if len(filtered_rak) == 0 and len(parts) == 2 and parts[1].isdigit():
                 group = parts[0]
                 deleted_floor = int(parts[1])
                 
@@ -324,12 +326,14 @@ def on_enter_hapus_barang():
                         st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
                         current_floor += 1
                     else:
+                        # RAK TERATAS HANYA DIKOSONGKAN ISINYA, NAMA RAK TIDAK BOLEH DIHAPUS (DI-DELETE)!
                         top_rak = f"{group}-{current_floor - 1}"
                         if top_rak in st.session_state.rak_gudang_tanpa_posisi:
-                            del st.session_state.rak_gudang_tanpa_posisi[top_rak]
+                            st.session_state.rak_gudang_tanpa_posisi[top_rak] = []
                         break
-                pesan_tambahan = " Rak di atasnya otomatis turun."
+                pesan_tambahan = " (Rak kosong, tumpukan atasnya otomatis turun)."
             else:
+                # Jika rak masih ada sisa barang lain, cukup simpan sisa barangnya saja. Gravitasi dimatikan.
                 st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
                 pesan_tambahan = ""
 
@@ -342,6 +346,7 @@ def on_enter_hapus_barang():
     else:
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan.", "timestamp": time.time()}
         st.session_state.input_version += 1
+        
     st.session_state.focus_hapus_sku_after_save = True
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
@@ -373,7 +378,6 @@ def ui_manajemen_rak():
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
-        # PENGURUTAN NATURAL DITERAPKAN DI SINI
         rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         df_rak = []
         for r in rak_sorted:
@@ -460,7 +464,6 @@ def ui_pencarian_visual():
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
-        # PENGURUTAN NATURAL DITERAPKAN DI SINI
         rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         
         html_vis = ""
@@ -693,12 +696,9 @@ else:
 
 
 # ==================== GLOBAL NOTIFICATION HANDLER (TANPA SLEEP BEKU) ====================
-# Sistem ini membuat notifikasi bertahan selama 3.5 detik di layar,
-# TAPI Anda BISA TERUS MEN-SCAN barang baru TANPA HARUS MENUNGGU!
 if "global_notif" in st.session_state and st.session_state.global_notif:
     notif = st.session_state.global_notif
     
-    # Cek apakah notifikasi ini usianya masih di bawah 3.5 detik
     if time.time() - notif.get("timestamp", time.time()) < 3.5:
         tab_aktif = notif["tab"]
         if tab_aktif in placeholders:
@@ -710,5 +710,4 @@ if "global_notif" in st.session_state and st.session_state.global_notif:
                 elif notif["type"] == "warning":
                     st.warning(notif["text"])
     else:
-        # Hapus notifikasi jika sudah kadaluarsa (lebih dari 3.5 detik)
         st.session_state.global_notif = None
