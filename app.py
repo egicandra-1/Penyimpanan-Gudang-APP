@@ -21,6 +21,19 @@ placeholders = {}
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
 
+# ==================== FUNGSI PENDETEKSI BLOK/GRUP RAK ====================
+def get_group_name(rack_name):
+    s = str(rack_name).strip()
+    if "-" in s:
+        # Mengambil semua karakter sebelum tanda strip "-" terakhir sebagai nama grup
+        return s.rsplit("-", 1)[0].upper()
+    else:
+        # Jika tidak ada strip, ambil huruf depannya saja
+        match = re.match(r"^([a-zA-Z]+)", s)
+        if match:
+            return match.group(1).upper()
+        return "LAINNYA"
+
 @st.cache_resource
 def init_connection_v3():
     if "gcp_json_teks" not in st.secrets:
@@ -174,42 +187,59 @@ def on_enter_tambah_rak():
     st.session_state.input_version += 1
     st.session_state.focus_rak_after_save = True 
 
-# ==================== CALLBACK DATABASE RAK ====================
+# ==================== CALLBACK DATABASE RAK (DIPISAH PER BLOK) ====================
 def proses_perubahan_tabel_rak():
-    changes = st.session_state.editor_tabel_rak
-    rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
     needs_save = False
     ada_error = False
     
-    if changes.get("deleted_rows"):
-        for idx in sorted(changes["deleted_rows"], reverse=True):
-            if idx < len(rak_sorted):
-                old_name = rak_sorted[idx]
-                if old_name in st.session_state.rak_gudang_tanpa_posisi:
-                    del st.session_state.rak_gudang_tanpa_posisi[old_name]
-                    needs_save = True
-
-    if changes.get("edited_rows"):
-        for idx, edit_data in changes["edited_rows"].items():
-            if "Nama Rak" in edit_data:
-                if idx < len(rak_sorted):
-                    old_name = rak_sorted[idx]
-                    new_name = edit_data["Nama Rak"].strip()
-                    if old_name in st.session_state.rak_gudang_tanpa_posisi and new_name and new_name != old_name:
-                        if new_name not in st.session_state.rak_gudang_tanpa_posisi:
-                            st.session_state.rak_gudang_tanpa_posisi[new_name] = st.session_state.rak_gudang_tanpa_posisi.pop(old_name)
+    # 1. Kita buat pemetaan grup ulang persis seperti saat tabel dirender
+    rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
+    grouped_racks = {}
+    for r in rak_sorted:
+        grp = get_group_name(r)
+        if grp not in grouped_racks:
+            grouped_racks[grp] = []
+        grouped_racks[grp].append(r)
+        
+    # 2. Kita periksa satu per satu tabel mana yang mengalami perubahan
+    for grp, rak_list in grouped_racks.items():
+        editor_key = f"editor_tabel_rak_{grp}"
+        
+        if editor_key in st.session_state:
+            changes = st.session_state[editor_key]
+            
+            # PROSES HAPUS
+            if changes.get("deleted_rows"):
+                for idx in sorted(changes["deleted_rows"], reverse=True):
+                    if idx < len(rak_list):
+                        old_name = rak_list[idx]
+                        if old_name in st.session_state.rak_gudang_tanpa_posisi:
+                            del st.session_state.rak_gudang_tanpa_posisi[old_name]
                             needs_save = True
-                        else:
-                            st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Gagal! Nama rak '{new_name}' sudah ada.", "timestamp": time.time()}
-                            ada_error = True
 
-    if changes.get("added_rows"):
-        for row in changes["added_rows"]:
-            if "Nama Rak" in row and row["Nama Rak"]:
-                new_name = row["Nama Rak"].strip()
-                if new_name and new_name not in st.session_state.rak_gudang_tanpa_posisi:
-                    st.session_state.rak_gudang_tanpa_posisi[new_name] = []
-                    needs_save = True
+            # PROSES EDIT NAMA RAK
+            if changes.get("edited_rows"):
+                for idx, edit_data in changes["edited_rows"].items():
+                    if "Nama Rak" in edit_data:
+                        if idx < len(rak_list):
+                            old_name = rak_list[idx]
+                            new_name = edit_data["Nama Rak"].strip()
+                            if old_name in st.session_state.rak_gudang_tanpa_posisi and new_name and new_name != old_name:
+                                if new_name not in st.session_state.rak_gudang_tanpa_posisi:
+                                    st.session_state.rak_gudang_tanpa_posisi[new_name] = st.session_state.rak_gudang_tanpa_posisi.pop(old_name)
+                                    needs_save = True
+                                else:
+                                    st.session_state.global_notif = {"tab": "rak", "type": "error", "text": f"❌ Gagal! Nama rak '{new_name}' sudah ada.", "timestamp": time.time()}
+                                    ada_error = True
+
+            # PROSES TAMBAH BARIS MANUAL DARI TABEL
+            if changes.get("added_rows"):
+                for row in changes["added_rows"]:
+                    if "Nama Rak" in row and row["Nama Rak"]:
+                        new_name = row["Nama Rak"].strip()
+                        if new_name and new_name not in st.session_state.rak_gudang_tanpa_posisi:
+                            st.session_state.rak_gudang_tanpa_posisi[new_name] = []
+                            needs_save = True
 
     if needs_save and not ada_error:
         save_data_to_sheets()
@@ -401,34 +431,50 @@ def ui_manajemen_rak():
     if not st.session_state.rak_gudang_tanpa_posisi:
         st.info("Belum ada rak yang terdaftar.")
     else:
+        # Mengurutkan rak secara natural (A-1, A-2, A-10)
         rak_sorted = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
-        df_rak = []
+        
+        # PENGELOMPOKAN RAK BERDASARKAN AWALAN (BLOK)
+        grouped_racks = {}
         for r in rak_sorted:
-            items = st.session_state.rak_gudang_tanpa_posisi[r]
-            sku_list = ", ".join([str(item["sku"]) for item in items]) if items else "-"
-            sku_count = len(items)
-            total_stok = sum(item["stok"] for item in items)
+            grp = get_group_name(r)
+            if grp not in grouped_racks:
+                grouped_racks[grp] = []
+            grouped_racks[grp].append(r)
             
-            df_rak.append({
-                "Nama Rak": r, 
-                "KODE SKU": sku_list, 
-                "Stok": total_stok,
-                "Total Item Berbeda": sku_count
-            })
+        # Merender tabel satu per satu berdasarkan grup yang sudah diurutkan
+        for grp in sorted(grouped_racks.keys(), key=natural_sort_key):
+            # Membuat Judul Header per Blok Rak
+            st.markdown(f"<h5 style='color: #E74C3C; margin-top: 15px; margin-bottom: 5px;'>🗂️ Blok Rak: {grp}</h5>", unsafe_allow_html=True)
             
-        st.data_editor(
-            df_rak,
-            column_config={
-                "Nama Rak": st.column_config.TextColumn("Nama Rak", required=True),
-                "KODE SKU": st.column_config.TextColumn("KODE SKU", disabled=True),
-                "Stok": st.column_config.NumberColumn("Stok", disabled=True),
-                "Total Item Berbeda": st.column_config.NumberColumn("Total Item Berbeda", disabled=True)
-            },
-            use_container_width=True,
-            num_rows="dynamic",
-            key="editor_tabel_rak",
-            on_change=proses_perubahan_tabel_rak
-        )
+            df_rak = []
+            for r in grouped_racks[grp]:
+                items = st.session_state.rak_gudang_tanpa_posisi[r]
+                sku_list = ", ".join([str(item["sku"]) for item in items]) if items else "-"
+                sku_count = len(items)
+                total_stok = sum(item["stok"] for item in items)
+                
+                df_rak.append({
+                    "Nama Rak": r, 
+                    "KODE SKU": sku_list, 
+                    "Stok": total_stok,
+                    "Total Item Berbeda": sku_count
+                })
+                
+            # Render tabel khusus untuk grup ini
+            st.data_editor(
+                df_rak,
+                column_config={
+                    "Nama Rak": st.column_config.TextColumn("Nama Rak", required=True),
+                    "KODE SKU": st.column_config.TextColumn("KODE SKU", disabled=True),
+                    "Stok": st.column_config.NumberColumn("Stok", disabled=True),
+                    "Total Item Berbeda": st.column_config.NumberColumn("Total Item Berbeda", disabled=True)
+                },
+                use_container_width=True,
+                num_rows="dynamic",
+                key=f"editor_tabel_rak_{grp}", # Key unik per grup tabel
+                on_change=proses_perubahan_tabel_rak
+            )
         
     if target_focus:
         components.html(f"""
@@ -489,11 +535,6 @@ def ui_pencarian_visual():
     else:
         rak_sorted_visual = sorted(list(st.session_state.rak_gudang_tanpa_posisi.keys()), key=natural_sort_key)
         
-        # =========================================================================
-        # PEROMBAKAN MESIN RENDER VISUAL KHUSUS PDA (LAYAR SEMPIT)
-        # minmax diubah menjadi 130px agar muat 2 baris di layar scanner Anda!
-        # Padding dan font diperkecil agar terlihat rapi dan tidak tumpang tindih.
-        # =========================================================================
         html_vis = "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; padding-bottom: 20px;'>"
         
         for r_nama in rak_sorted_visual:
