@@ -133,6 +133,9 @@ if "input_version" not in st.session_state:
 
 if "displayed_search_query" not in st.session_state:
     st.session_state.displayed_search_query = ""
+    
+if "pending_hapus" not in st.session_state:
+    st.session_state.pending_hapus = None
 
 # ==================== CALLBACK TAMBAH RAK ====================
 def on_enter_tambah_rak():
@@ -279,6 +282,10 @@ def on_enter_input_barang():
 
 # ==================== CALLBACK TAB HAPUS (TUMPUKAN GRAVITASI) ====================
 def on_enter_hapus_barang():
+    # Cegah input baru jika pop up konfirmasi sedang menyala
+    if st.session_state.pending_hapus is not None:
+        return
+
     v = st.session_state.input_version
     sku_clean = st.session_state.get(f"hapus_sku_field_{v}", "").strip()
     rak_clean = st.session_state.get(f"hapus_rak_field_{v}", "").strip()
@@ -303,43 +310,26 @@ def on_enter_hapus_barang():
         
     if rak_clean in st.session_state.rak_gudang_tanpa_posisi:
         rak_lama = st.session_state.rak_gudang_tanpa_posisi[rak_clean]
-        
-        # Mengecek apakah barang ada di rak ini
         filtered_rak = [item for item in rak_lama if item["sku"].lower() != sku_clean.lower()]
         
-        if len(filtered_rak) < len(rak_lama): # Barang ditemukan dan berhasil dihapus!
+        if len(filtered_rak) < len(rak_lama):
             parts = rak_clean.rsplit("-", 1)
-            pesan_tambahan = ""
             
-            # --- LOGIKA GRAVITASI YANG SUDAH DIPERBAIKI ---
-            # Gravitasi HANYA aktif jika RAK MENJADI KOSONG TOTAL (len(filtered_rak) == 0)
+            # --- CEK APAKAH INI AKAN MEMICU GRAVITASI? ---
             if len(filtered_rak) == 0 and len(parts) == 2 and parts[1].isdigit():
-                group = parts[0]
-                deleted_floor = int(parts[1])
-                
-                current_floor = deleted_floor + 1
-                while True:
-                    next_rak = f"{group}-{current_floor}"
-                    curr_rak = f"{group}-{current_floor - 1}"
-                    
-                    if next_rak in st.session_state.rak_gudang_tanpa_posisi:
-                        st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
-                        current_floor += 1
-                    else:
-                        # RAK TERATAS HANYA DIKOSONGKAN ISINYA, NAMA RAK TIDAK BOLEH DIHAPUS (DI-DELETE)!
-                        top_rak = f"{group}-{current_floor - 1}"
-                        if top_rak in st.session_state.rak_gudang_tanpa_posisi:
-                            st.session_state.rak_gudang_tanpa_posisi[top_rak] = []
-                        break
-                pesan_tambahan = " (Rak kosong, tumpukan atasnya otomatis turun)."
+                # MENYALAKAN POP-UP KONFIRMASI! Hapus ditunda.
+                st.session_state.pending_hapus = {
+                    "sku": sku_clean,
+                    "rak": rak_clean
+                }
+                st.session_state.input_version += 1
+                return 
             else:
-                # Jika rak masih ada sisa barang lain, cukup simpan sisa barangnya saja. Gravitasi dimatikan.
+                # NORMAL HAPUS (Tidak memicu gravitasi)
                 st.session_state.rak_gudang_tanpa_posisi[rak_clean] = filtered_rak
-                pesan_tambahan = ""
-
-            save_data_to_sheets()
-            st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!{pesan_tambahan}", "timestamp": time.time()}
-            st.session_state.input_version += 1
+                save_data_to_sheets()
+                st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku_clean}' dihapus dari '{rak_clean}'!", "timestamp": time.time()}
+                st.session_state.input_version += 1
         else:
             st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ SKU '{sku_clean}' tidak ditemukan di rak '{rak_clean}'.", "timestamp": time.time()}
             st.session_state.input_version += 1
@@ -347,6 +337,43 @@ def on_enter_hapus_barang():
         st.session_state.global_notif = {"tab": "hapus", "type": "error", "text": f"❌ Rak '{rak_clean}' tidak ditemukan.", "timestamp": time.time()}
         st.session_state.input_version += 1
         
+    st.session_state.focus_hapus_sku_after_save = True
+
+# ==================== CALLBACK TOMBOL POP-UP KONFIRMASI ====================
+def konfirmasi_ya():
+    pending = st.session_state.pending_hapus
+    sku = pending["sku"]
+    rak = pending["rak"]
+    
+    parts = rak.rsplit("-", 1)
+    group = parts[0]
+    deleted_floor = int(parts[1])
+    
+    current_floor = deleted_floor + 1
+    while True:
+        next_rak = f"{group}-{current_floor}"
+        curr_rak = f"{group}-{current_floor - 1}"
+        
+        if next_rak in st.session_state.rak_gudang_tanpa_posisi:
+            st.session_state.rak_gudang_tanpa_posisi[curr_rak] = st.session_state.rak_gudang_tanpa_posisi[next_rak]
+            current_floor += 1
+        else:
+            top_rak = f"{group}-{current_floor - 1}"
+            if top_rak in st.session_state.rak_gudang_tanpa_posisi:
+                st.session_state.rak_gudang_tanpa_posisi[top_rak] = []
+            break
+            
+    save_data_to_sheets()
+    st.session_state.global_notif = {"tab": "hapus", "type": "success", "text": f"✅ SKU '{sku}' dihapus. (Rak '{rak}' kosong, tumpukan atasnya otomatis turun!).", "timestamp": time.time()}
+    
+    st.session_state.pending_hapus = None
+    st.session_state.input_version += 1
+    st.session_state.focus_hapus_sku_after_save = True
+
+def konfirmasi_tidak():
+    st.session_state.pending_hapus = None
+    st.session_state.global_notif = {"tab": "hapus", "type": "warning", "text": "🛑 Penghapusan dan proses gravitasi DIBATALKAN.", "timestamp": time.time()}
+    st.session_state.input_version += 1
     st.session_state.focus_hapus_sku_after_save = True
 
 # ==================== FUNGSI TAMPILAN (UI) ====================
@@ -540,40 +567,51 @@ def ui_input_barang():
 def ui_hapus_barang():
     st.markdown("### ❌ Hapus Barang dari Rak")
     placeholders["hapus"] = st.empty() 
-
-    v = st.session_state.input_version
     
-    target_focus = None
-    if st.session_state.get("focus_hapus_sku_after_save", False):
-        target_focus = "Masukkan Kode SKU yang akan dihapus:"
-        st.session_state.focus_hapus_sku_after_save = False
+    # === POP UP KONFIRMASI GRAVITASI ===
+    if st.session_state.pending_hapus is not None:
+        pending = st.session_state.pending_hapus
+        st.error(f"⚠️ **PERINGATAN SISTEM GRAVITASI!**\n\nMenghapus SKU **{pending['sku']}** akan membuat **Rak {pending['rak']}** menjadi KOSONG TOTAL.\n\nApakah Anda yakin ingin menghapus barang ini dan **menurunkan rak di atasnya**?")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.button("✅ YA, LANJUTKAN", use_container_width=True, type="primary", on_click=konfirmasi_ya)
+        with col2:
+            st.button("❌ TIDAK, BATAL", use_container_width=True, on_click=konfirmasi_tidak)
+    else:
+        # === INPUT NORMAL JIKA TIDAK ADA POP UP ===
+        v = st.session_state.input_version
+        target_focus = None
+        if st.session_state.get("focus_hapus_sku_after_save", False):
+            target_focus = "Masukkan Kode SKU yang akan dihapus:"
+            st.session_state.focus_hapus_sku_after_save = False
 
-    st.text_input("Masukkan Kode SKU yang akan dihapus:", key=f"hapus_sku_field_{v}")
-    st.text_input(
-        "Ketik Nama Rak Asal (Enter untuk Hapus Cepat):", 
-        key=f"hapus_rak_field_{v}", 
-        on_change=on_enter_hapus_barang
-    )
+        st.text_input("Masukkan Kode SKU yang akan dihapus:", key=f"hapus_sku_field_{v}")
+        st.text_input(
+            "Ketik Nama Rak Asal (Enter untuk Hapus Cepat):", 
+            key=f"hapus_rak_field_{v}", 
+            on_change=on_enter_hapus_barang
+        )
 
-    st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
+        st.button("Hapus SKU", use_container_width=True, on_click=on_enter_hapus_barang)
 
-    if target_focus:
-        components.html(f"""
-            <script id="focus-hapus-{time.time()}">
-            const doc = window.parent.document;
-            function tryFocus(label, attempts) {{
-                if (attempts <= 0) return;
-                const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
-                const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
-                if (inputToFocus) {{
-                    setTimeout(() => inputToFocus.focus(), 50);
-                }} else {{
-                    setTimeout(() => tryFocus(label, attempts - 1), 100);
+        if target_focus:
+            components.html(f"""
+                <script id="focus-hapus-{time.time()}">
+                const doc = window.parent.document;
+                function tryFocus(label, attempts) {{
+                    if (attempts <= 0) return;
+                    const inputs = Array.from(doc.querySelectorAll('input[type="text"]'));
+                    const inputToFocus = inputs.find(el => el.getAttribute('aria-label') === label);
+                    if (inputToFocus) {{
+                        setTimeout(() => inputToFocus.focus(), 50);
+                    }} else {{
+                        setTimeout(() => tryFocus(label, attempts - 1), 100);
+                    }}
                 }}
-            }}
-            tryFocus('{target_focus}', 15);
-            </script>
-        """, height=0, width=0)
+                tryFocus('{target_focus}', 15);
+                </script>
+            """, height=0, width=0)
 
 # ==================== RENDER APLIKASI UTAMA ====================
 
